@@ -1,21 +1,9 @@
 import warnings
-
 import torch
 from torch import nn as nn
 
-
 class BidirectionalGRU(nn.Module):
     def __init__(self, n_in, n_hidden, dropout=0, num_layers=1):
-
-        """
-            Initialization of BidirectionalGRU instance
-        Args:
-            n_in: int, number of input
-            n_hidden: int, number of hidden layers
-            dropout: flat, dropout
-            num_layers: int, number of layers
-        """
-
         super(BidirectionalGRU, self).__init__()
         self.rnn = nn.GRU(
             n_in,
@@ -29,7 +17,6 @@ class BidirectionalGRU(nn.Module):
     def forward(self, input_feat):
         recurrent, _ = self.rnn(input_feat)
         return recurrent
-
 
 class BidirectionalLSTM(nn.Module):
     def __init__(self, nIn, nHidden, nOut, dropout=0, num_layers=1):

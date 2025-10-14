@@ -331,7 +331,13 @@ def single_run(
         trainer.fit(desed_training, ckpt_path=checkpoint_resume)
         best_path = trainer.checkpoint_callback.best_model_path
         print(f"best model: {best_path}")
-        test_state_dict = torch.load(best_path)["state_dict"]
+        
+        # Handle case where no checkpoint was saved (e.g., in fast_dev_run mode)
+        if not best_path or not os.path.exists(best_path):
+            print("No checkpoint saved during training, using current model state for testing")
+            test_state_dict = desed_training.state_dict()
+        else:
+            test_state_dict = torch.load(best_path)["state_dict"]
 
     desed_training.load_state_dict(test_state_dict)
     trainer.test(desed_training)

@@ -44,20 +44,6 @@ class CNN(nn.Module):
         normalization="batch",
         **transformer_kwargs
     ):
-        """
-            Initialization of CNN network s
-        
-        Args:
-            n_in_channel: int, number of input channel
-            activation: str, activation function
-            conv_dropout: float, dropout
-            kernel_size: kernel size
-            padding: padding
-            stride: list, stride
-            nb_filters: number of filters
-            pooling: list of tuples, time and frequency pooling
-            normalization: choose between "batch" for BatchNormalization and "layer" for LayerNormalization.
-        """
         super(CNN, self).__init__()
 
         self.nb_filters = nb_filters
@@ -100,15 +86,5 @@ class CNN(nn.Module):
         self.cnn = cnn
 
     def forward(self, x):
-        """
-        Forward step of the CNN module
-
-        Args:
-            x (Tensor): input batch of size (batch_size, n_channels, n_frames, n_freq)
-
-        Returns:
-            Tensor: batch embedded
-        """
-        # conv features
         x = self.cnn(x)
         return x

@@ -746,6 +746,8 @@ class SEDTask4(pl.LightningModule):
                     audio_id: audio_durations[audio_id]
                     for audio_id in self.test_scores_postprocessed_buffer_student
                 }
+                scores_student = self.test_scores_postprocessed_buffer_student
+                scores_teacher = self.test_scores_postprocessed_buffer_teacher
             else:
                 # drop audios without events
                 ground_truth = {

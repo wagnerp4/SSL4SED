@@ -269,6 +269,7 @@ def compute_psds_from_scores(
     num_jobs=4,
     save_dir=None,
 ):
+    
     psds, psd_roc, single_class_rocs, *_ = sed_scores_eval.intersection_based.psds(
         scores=scores, ground_truth=ground_truth_file,
         audio_durations=durations_file,
@@ -276,6 +277,7 @@ def compute_psds_from_scores(
         cttc_threshold=cttc_threshold, alpha_ct=alpha_ct, alpha_st=alpha_st,
         max_efpr=max_efpr, num_jobs=num_jobs,
     )
+
     if save_dir is not None:
         scores_dir = os.path.join(save_dir, "scores")
         sed_scores_eval.io.write_sed_scores(scores, scores_dir)

@@ -1,3 +1,5 @@
+# DCASE 2019 Baseline Model
+
 import warnings
 
 import torch.nn as nn
@@ -46,7 +48,6 @@ class CRNN(nn.Module):
             **kwargs: keywords arguments for CNN.
         """
         super(CRNN, self).__init__()
-
         self.n_in_channel = n_in_channel
         self.attention = attention
         self.cnn_integration = cnn_integration
@@ -54,7 +55,6 @@ class CRNN(nn.Module):
         self.use_embeddings = use_embeddings
         self.embedding_type = embedding_type
         self.aggregation_type = aggregation_type
-
         n_in_cnn = n_in_channel
 
         if cnn_integration:
@@ -94,7 +94,6 @@ class CRNN(nn.Module):
             self.dense_softmax = nn.Linear(n_RNN_cell * 2, nclass)
             self.softmax = nn.Softmax(dim=-1)
 
-
         if self.use_embeddings:
             if self.aggregation_type == "frame":
                 self.frame_embs_encoder = nn.GRU(batch_first=True, input_size=embedding_size,
@@ -114,9 +113,7 @@ class CRNN(nn.Module):
             else:
                 self.cat_tf = torch.nn.Linear(2*nb_in, nb_in)
 
-        
     def forward(self, x, pad_mask=None, embeddings=None):
-
         x = x.transpose(1, 2).unsqueeze(1)
 
         # input size : (batch_size, n_channels, n_frames, n_freq)

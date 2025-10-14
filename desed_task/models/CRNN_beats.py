@@ -1,3 +1,5 @@
+# DCASE 2023 Baseline Model
+
 import torch.nn as nn
 import torch
 from .beats.beats_model import BEATs_model
