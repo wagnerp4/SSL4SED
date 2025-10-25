@@ -1,0 +1,11 @@
+Event,Total_Participations,Unique_Combinations,Avg_Cooccurrence,Most_Common_Partner
+Speech,33800,9,3380.0,Blender
+Blender,10432,8,1043.5,Speech
+Vacuum_cleaner,6996,3,699.6,Speech
+Dishes,6913,9,691.8,Speech
+Frying,5749,8,575.4,Speech
+Dog,5666,8,566.6,Speech
+Alarm_bell_ringing,5495,8,549.5,Speech
+Electric_shaver_toothbrush,4692,4,469.2,Speech
+Running_water,4311,7,431.1,Speech
+Cat,4003,8,400.5,Speech
