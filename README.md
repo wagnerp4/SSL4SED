@@ -1,14 +1,3 @@
-<div align="center" style="font-size: 175%;">
-
-# SSL4SED
-
-<!-- [![Documentation](https://img.shields.io/github/actions/workflow/status/wagnerp4/SSL_SED/docs.yml?label=docs&color=3f888f)](https://wagnerp4.github.io/SSL_SED/) -->
-[![Python](https://img.shields.io/badge/python-3.10%2B-3f888f?logo=python&logoColor=3f888f)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/github/license/wagnerp4/SSL_SED?color=3f888f)](https://github.com/wagnerp4/SSL_SED/blob/main/LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/wagnerp4/SSL_SED?color=3f888f)](https://github.com/wagnerp4/SSL_SED/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/wagnerp4/SSL_SED?color=3f888f)](https://github.com/wagnerp4/SSL_SED/network/members)
-[![GitHub Contributors](https://img.shields.io/github/contributors/wagnerp4/SSL_SED?color=3f888f)](https://github.com/wagnerp4/SSL_SED/graphs/contributors)
-
 </div>
 
 # Introduction
