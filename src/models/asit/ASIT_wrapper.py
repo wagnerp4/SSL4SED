@@ -1,6 +1,6 @@
-from models.asit.data_transformations import DataAugmentation
-from models.asit.vision_transformer import vit_base
-from models.transformer_wrapper import BaseModelWrapper
+from src.models.asit.data_transformations import DataAugmentation
+from src.models.asit.vision_transformer import vit_base
+from src.models.transformer_wrapper import BaseModelWrapper
 
 
 class ASiTWrapper(BaseModelWrapper):

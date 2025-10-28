@@ -4,13 +4,13 @@ import pandas as pd
 import torch
 import yaml
 
-from desed_task.dataio.sampler import ConcatDatasetBatchSampler
-from desed_task.utils.encoder import ManyHotEncoder
-from desed_task.models.CRNN_e2e import CRNN
+from src.dataio.sampler import ConcatDatasetBatchSampler
+from src.utils.encoder import ManyHotEncoder
+from src.models.CRNN_e2e import CRNN
 from local.scheduler import ExponentialWarmup
 from local.classes_dict import classes_labels
 from local.stage1_trainer import SEDTask4
-from desed_task.dataio.datasets_atst_sed import StronglyAnnotatedSet, UnlabeledSet, WeakSet
+from src.dataio.datasets_atst_sed import StronglyAnnotatedSet, UnlabeledSet, WeakSet
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -72,6 +72,12 @@ def single_run(
     callbacks=None
 ):
     config.update({"log_dir": log_dir})
+
+    # Handle Mac MPS backend: MPS doesn't support float64
+    # When running fast_dev_run on Mac, force float32
+    if fast_dev_run and torch.backends.mps.is_available():
+        torch.set_default_dtype(torch.float32)
+        print("Mac detected (MPS backend). Using float32 for fast_dev_run compatibility.")
 
     # handle seed
     seed = config["training"]["seed"]
@@ -337,7 +343,7 @@ def single_run(
             print("No checkpoint saved during training, using current model state for testing")
             test_state_dict = desed_training.state_dict()
         else:
-            test_state_dict = torch.load(best_path)["state_dict"]
+            test_state_dict = torch.load(best_path, weights_only=False)["state_dict"]
 
     desed_training.load_state_dict(test_state_dict)
     trainer.test(desed_training)
@@ -346,7 +352,7 @@ def prepare_run(argv=None):
     parser = argparse.ArgumentParser("Training a SED system for DESED Task")
     parser.add_argument(
         "--conf_file",
-        default="train/confs/stage1.yaml",
+        default="src/training/confs/stage1.yaml",
         help="The configuration file with all the experiment parameters.",
     )
     parser.add_argument(
@@ -407,7 +413,7 @@ def prepare_run(argv=None):
 
     test_model_state_dict = None
     if test_from_checkpoint is not None:
-        checkpoint = torch.load(test_from_checkpoint)
+        checkpoint = torch.load(test_from_checkpoint, weights_only=False)
         configs_ckpt = checkpoint["hyper_parameters"]
         configs_ckpt["data"] = configs["data"]
         print(

@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 from .rrc_module import RandomResizeCrop
-from desed_task.utils.scaler import TorchScaler
+from src.utils.scaler import TorchScaler
 import numpy as np
 import torchmetrics
 
@@ -16,7 +16,7 @@ from .utils import (
     batched_decode_preds,
     log_sedeval_metrics,
 )
-from desed_task.evaluation.evaluation_measures import (
+from src.evaluation.evaluation_measures import (
     compute_per_intersection_macro_f1,
     compute_psds_from_operating_points,
     compute_psds_from_scores
@@ -207,7 +207,7 @@ class SEDTask4(pl.LightningModule):
             raise NotImplementedError
         if self.hparams["scaler"]["savepath"] is not None:
             if os.path.exists(self.hparams["scaler"]["savepath"]):
-                scaler = torch.load(self.hparams["scaler"]["savepath"])
+                scaler = torch.load(self.hparams["scaler"]["savepath"], weights_only=False)
                 print(
                     "Loaded Scaler from previous checkpoint from {}".format(
                         self.hparams["scaler"]["savepath"]

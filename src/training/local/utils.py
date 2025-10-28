@@ -6,7 +6,7 @@ import pandas as pd
 import scipy
 import torch
 
-from desed_task.evaluation.evaluation_measures import compute_sed_eval_metrics
+from src.evaluation.evaluation_measures import compute_sed_eval_metrics
 import json
 
 import soundfile

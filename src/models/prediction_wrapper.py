@@ -4,8 +4,11 @@ import torch
 import torch.nn as nn
 from torch.hub import download_url_to_file
 
-from config import RESOURCES_FOLDER, CHECKPOINT_URLS
-from models.seq_models import BidirectionalLSTM, BidirectionalGRU
+# RESOURCES_FOLDER and CHECKPOINT_URLS - these need to be defined or imported from config
+# from src.models.preprocess import RESOURCES_FOLDER, CHECKPOINT_URLS
+RESOURCES_FOLDER = os.getenv("RESOURCES_FOLDER", "./resources")
+CHECKPOINT_URLS = {}  # Define this dictionary as needed
+from src.models.seq_models import BidirectionalLSTM, BidirectionalGRU
 
 
 class PredictionsWrapper(nn.Module):
@@ -93,7 +96,7 @@ class PredictionsWrapper(nn.Module):
         ckpt_file = os.path.join(RESOURCES_FOLDER, checkpoint + ".pt")
         if not os.path.exists(ckpt_file):
             download_url_to_file(CHECKPOINT_URLS[checkpoint], ckpt_file)
-        state_dict = torch.load(ckpt_file, map_location="cpu", weights_only=True)
+        state_dict = torch.load(ckpt_file, map_location="cpu", weights_only=False)
 
         # compatibility with uniform wrapper structure we introduced for the public repo
         if 'fpasst' in checkpoint:
@@ -182,7 +185,13 @@ class PredictionsWrapper(nn.Module):
         assert len(x.shape) == 3
 
         if x.size(-2) > self.seq_len:
-            x = torch.nn.functional.adaptive_avg_pool1d(x.transpose(1, 2), self.seq_len).transpose(1, 2)
+            # MPS doesn't support adaptive pooling when sizes aren't divisible
+            if x.device.type == "mps":
+                x_cpu = x.cpu()
+                x_pooled = torch.nn.functional.adaptive_avg_pool1d(x_cpu.transpose(1, 2), self.seq_len).transpose(1, 2)
+                x = x_pooled.to(x.device)
+            else:
+                x = torch.nn.functional.adaptive_avg_pool1d(x.transpose(1, 2), self.seq_len).transpose(1, 2)
         elif x.size(-2) < self.seq_len:
             x = torch.nn.functional.interpolate(x.transpose(1, 2), size=self.seq_len,
                                                 mode='linear').transpose(1, 2)

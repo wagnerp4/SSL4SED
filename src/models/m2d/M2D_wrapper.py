@@ -1,5 +1,5 @@
-from models.m2d.portable_m2d import PortableM2D as M2D
-from models.transformer_wrapper import BaseModelWrapper
+from src.models.m2d.portable_m2d import PortableM2D as M2D
+from src.models.transformer_wrapper import BaseModelWrapper
 
 
 class M2DWrapper(BaseModelWrapper):

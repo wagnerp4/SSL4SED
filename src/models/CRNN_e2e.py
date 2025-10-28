@@ -77,10 +77,10 @@ class CRNN(nn.Module):
         else:
             if mode == "teacher":
                 print("Loading teacher from:", path)
-                state_dict = torch.load(path, map_location="cpu")["sed_teacher"]
+                state_dict = torch.load(path, map_location="cpu", weights_only=False)["sed_teacher"]
             else:
                 print("Loading student from:", path)
-                state_dict = torch.load(path, map_location="cpu")["sed_student"]
+                state_dict = torch.load(path, map_location="cpu", weights_only=False)["sed_student"]
             self.load_state_dict(state_dict, strict=True)
             print("Model loaded")
 
@@ -95,7 +95,13 @@ class CRNN(nn.Module):
         # rnn features
         embeddings = self.atst_frame(pretrain_x)
         if embeddings.shape[-1] != x.shape[1]:
-            embeddings = torch.nn.functional.adaptive_avg_pool1d(embeddings, x.shape[1]).transpose(1, 2)
+            # MPS doesn't support adaptive pooling when sizes aren't divisible
+            if embeddings.device.type == "mps":
+                embeddings_cpu = embeddings.cpu()
+                embeddings_pooled = torch.nn.functional.adaptive_avg_pool1d(embeddings_cpu, x.shape[1]).transpose(1, 2)
+                embeddings = embeddings_pooled.to(embeddings.device)
+            else:
+                embeddings = torch.nn.functional.adaptive_avg_pool1d(embeddings, x.shape[1]).transpose(1, 2)
         else:
             embeddings = embeddings.transpose(1, 2)
         x = self.cat_tf(torch.cat((x, embeddings), -1))

@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torchaudio.transforms
 
-from models.baseline.CNN import CNN
-from models.baseline.RNN import BidirectionalGRU
+from src.models.baseline.CNN import CNN
+from src.models.baseline.RNN import BidirectionalGRU
 
 
 class CRNN(nn.Module):
@@ -256,9 +256,17 @@ class CRNN(nn.Module):
                 )
 
             elif self.aggregation_type == "pool1d":
-                reshape_emb = torch.nn.functional.adaptive_avg_pool1d(
-                    embeddings, x.shape[1]
-                ).transpose(1, 2)
+                # MPS doesn't support adaptive pooling when sizes aren't divisible
+                if embeddings.device.type == "mps":
+                    embeddings_cpu = embeddings.cpu()
+                    reshape_emb = torch.nn.functional.adaptive_avg_pool1d(
+                        embeddings_cpu, x.shape[1]
+                    ).transpose(1, 2)
+                    reshape_emb = reshape_emb.to(embeddings.device)
+                else:
+                    reshape_emb = torch.nn.functional.adaptive_avg_pool1d(
+                        embeddings, x.shape[1]
+                    ).transpose(1, 2)
             else:
                 raise NotImplementedError
 

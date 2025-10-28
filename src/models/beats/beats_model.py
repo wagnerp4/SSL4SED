@@ -4,7 +4,7 @@ from .BEATs import BEATs, BEATsConfig
 class BEATs_model(torch.nn.Module):
     def __init__(self):
         super(BEATs_model, self).__init__()
-        checkpoint = torch.load("/home/shaonian/SED/ultra-SED/nnet/ckpts/BEATs_iter3_plus_AS2M.pt", map_location="cpu")
+        checkpoint = torch.load("/home/shaonian/SED/ultra-SED/nnet/ckpts/BEATs_iter3_plus_AS2M.pt", map_location="cpu", weights_only=False)
         cfg = BEATsConfig(checkpoint['cfg'])
         self.encoder = BEATs(cfg)
         self.encoder.load_state_dict(checkpoint['model'])

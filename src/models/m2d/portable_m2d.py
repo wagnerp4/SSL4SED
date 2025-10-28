@@ -187,7 +187,7 @@ def get_backbone(args, weight_file):
         return model, None
 
     # Load checkpoint.
-    checkpoint = torch.load(weight_file, map_location='cpu')
+    checkpoint = torch.load(weight_file, map_location='cpu', weights_only=False)
     checkpoint = reformat_ckpt_keys(checkpoint)
     # Set normalization statistics for backward compatibility. The [-7.1, 4.2] is for 2022 models.
     if 'norm_stats' not in checkpoint:

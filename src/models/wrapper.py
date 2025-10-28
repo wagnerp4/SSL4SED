@@ -4,9 +4,12 @@ import os
 from torch import autocast
 import torchaudio
 
-from models.baseline.RNN import BidirectionalGRU
-from models.baseline.CNN import CNN
-from configs import PRETRAINED_MODELS
+from src.models.baseline.RNN import BidirectionalGRU
+from src.models.baseline.CNN import CNN
+
+# PRETRAINED_MODELS needs to be set by environment or passed as parameter
+# from src.models.cnns import PRETRAINED_MODELS
+PRETRAINED_MODELS = os.getenv("PRETRAINED_MODELS", "/path/to/pretrained/models")
 
 
 first_RUN = True
@@ -36,7 +39,7 @@ class AudiosetWrapper(nn.Module):
 
     def load_model(self):
         pretrained_weights = torch.load(os.path.join(PRETRAINED_MODELS, self.pretrained_name + ".ckpt"),
-                                        map_location="cpu")["state_dict"]
+                                        map_location="cpu", weights_only=False)["state_dict"]
         state_dict_keys = pretrained_weights.keys()
         is_strong_pretrained = any([k.startswith('net_strong') for k in state_dict_keys])
         if is_strong_pretrained:
@@ -69,7 +72,13 @@ class AudiosetWrapper(nn.Module):
 
         if x.size(-2) != self.seq_len:
             # adapt seq len
-            x = torch.nn.functional.adaptive_avg_pool1d(x.transpose(1, 2), self.seq_len).transpose(1, 2)
+            # MPS doesn't support adaptive pooling when sizes aren't divisible
+            if x.device.type == "mps":
+                x_cpu = x.cpu()
+                x_pooled = torch.nn.functional.adaptive_avg_pool1d(x_cpu.transpose(1, 2), self.seq_len).transpose(1, 2)
+                x = x_pooled.to(x.device)
+            else:
+                x = torch.nn.functional.adaptive_avg_pool1d(x.transpose(1, 2), self.seq_len).transpose(1, 2)
 
         logits = self.head_linear_layer(x)
 
@@ -239,10 +248,10 @@ class Task4CRNNEmbeddingsWrapper(nn.Module):
             ckpt = os.path.join(PRETRAINED_MODELS, model_init_id + ".ckpt")
             if model_init_mode == "teacher":
                 print("Loaded teacher from ckpt: ", ckpt)
-                state_dict = torch.load(ckpt, map_location="cpu")["teacher"]
+                state_dict = torch.load(ckpt, map_location="cpu", weights_only=False)["teacher"]
             else:
                 print("Loaded student from ckpt: ", ckpt)
-                state_dict = torch.load(ckpt, map_location="cpu")["student"]
+                state_dict = torch.load(ckpt, map_location="cpu", weights_only=False)["student"]
             self.load_state_dict(state_dict, strict=True)
 
         self.first = True
@@ -266,7 +275,13 @@ class Task4CRNNEmbeddingsWrapper(nn.Module):
             print("Embedding model output:", embeddings.size())
 
         if self.embed_pool == "aap":
-            embeddings = torch.nn.functional.adaptive_avg_pool1d(embeddings, frames).transpose(1, 2)  # 156
+            # MPS doesn't support adaptive pooling when sizes aren't divisible
+            if embeddings.device.type == "mps":
+                embeddings_cpu = embeddings.cpu()
+                embeddings_pooled = torch.nn.functional.adaptive_avg_pool1d(embeddings_cpu, frames).transpose(1, 2)
+                embeddings = embeddings_pooled.to(embeddings.device)
+            else:
+                embeddings = torch.nn.functional.adaptive_avg_pool1d(embeddings, frames).transpose(1, 2)  # 156
         elif self.embed_pool == "conv":
             assert self.pool_assumption(frames, embeddings.size(-1))
             embeddings = self.pool_conv(embeddings).transpose(1, 2)  # 156

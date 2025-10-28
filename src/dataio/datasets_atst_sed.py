@@ -110,12 +110,17 @@ def read_audio(file, multisrc, random_channel, pad_to):
     """
 
     try:
-        mixture, fs = torchaudio.load(file)
-    except Exception as e:
-        print(f"Warning: Failed to read audio '{file}' due to '{e}'. Returning silence.")
-        fs = 16000
-        target_len = pad_to if pad_to is not None else fs * 10
-        mixture = torch.zeros(target_len)
+        # Try with soundfile backend first (best compatibility)
+        mixture, fs = torchaudio.load(file, backend="soundfile")
+    except Exception as e1:
+        try:
+            # Fall back to sox_io
+            mixture, fs = torchaudio.load(file, backend="sox_io")
+        except Exception as e2:
+            print(f"Warning: Failed to read audio '{file}' due to '{e2}'. Returning silence.")
+            fs = 16000
+            target_len = pad_to if pad_to is not None else fs * 10
+            mixture = torch.zeros(target_len)
 
     if not multisrc:
         mixture = to_mono(mixture, random_channel)
@@ -158,7 +163,7 @@ class ATSTTransform:
         # to_db applied in the trainer files
         return self.transform(x)
 
-
+# TODO: Create DatasetWrapper 
 class StronglyAnnotatedSet(Dataset):
     def __init__(
         self,
@@ -330,7 +335,8 @@ class WeakSet(Dataset):
         weak = torch.zeros(max_len_targets, len(self.encoder.labels))
         if len(labels):
             weak_labels = self.encoder.encode_weak(labels)
-            weak[0, :] = torch.from_numpy(weak_labels).float()
+            weak_labels_tensor = torch.from_numpy(weak_labels).float()
+            weak[0, :] = weak_labels_tensor
         # sed_feat = self.sed_transform(mixture)
         atst_feat = self.atst_transform(mixture)
         out_args = [mixture, atst_feat, weak.transpose(0, 1), padded_indx]

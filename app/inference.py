@@ -5,11 +5,12 @@ import torch.nn as nn
 import numpy as np
 import math
 from torchaudio.transforms import AmplitudeToDB
-from desed_task.models.CRNN_e2e import CRNN
-from desed_task.utils.encoder import ManyHotEncoder
-from desed_task.dataio.datasets_atst_sed import SEDTransform, ATSTTransform, read_audio
-from desed_task.utils.scaler import TorchScaler
-from training.local.classes_dict import classes_labels
+
+from src.models.CRNN_e2e import CRNN
+from src.utils.encoder import ManyHotEncoder
+from src.dataio.datasets_atst_sed import SEDTransform, ATSTTransform, read_audio
+from src.utils.scaler import TorchScaler
+from src.training.local.classes_dict import classes_labels
 
 class ATSTNorm(nn.Module):
     def __init__(self):
@@ -92,7 +93,7 @@ class ATSTSEDInferencer(nn.Module):
             atst_init=config["ultra"]["atst_init"],
             mode="teacher")
         # Load pretrained ckpt
-        state_dict = torch.load(pretrained_path, map_location="cpu")["state_dict"]
+        state_dict = torch.load(pretrained_path, map_location="cpu", weights_only=False)["state_dict"]
         ### get teacher model
         state_dict = {k.replace("sed_teacher.", ""): v for k, v in state_dict.items() if "teacher" in k}
         model.load_state_dict(state_dict, strict=True)
@@ -175,7 +176,7 @@ class ATSTSEDInferencer(nn.Module):
 if __name__ == "__main__":
     import soundfile as sf
     import matplotlib.pyplot as plt
-    test_file = "YOUR_TEST_FILE_HERE"
+    test_file = "YOUR_TEST_FILE_HERE" # TODO: read from args
     test_name = ".".join(test_file.split("/")[-1].split(".")[:-1])
     sed_classes = [x.split("_")[0] for x in classes_labels.keys()]
     inference_model = ATSTSEDInferencer(

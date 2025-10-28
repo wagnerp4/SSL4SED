@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torchaudio.transforms import AmplitudeToDB
 
-from desed_task.data_augm import mixup_w_pretrained
+from src.transforms.data_augm import mixup_w_pretrained
 from .ultra_sed_trainer import SEDTask4
 
 

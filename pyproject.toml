@@ -1,1 +1,72 @@
-# TODO add deps
+[project]
+name = "ssl4sed"
+version = "0.1.0"
+description = "Sound Event Detection using Self-Supervised Learning"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["sound-event-detection", "self-supervised-learning", "audio", "deep-learning"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+    "pytorch-lightning>=2.0.0",
+    "timm>=0.9.0",
+    "pandas>=1.5.0",
+    "pyyaml>=6.0",
+    "numpy>=1.24.0",
+    "tensorboard>=2.14.0",
+    "thop>=0.1.1",
+    "dcase-util>=0.2.16",
+    "psds-eval>=0.4.0",
+    "sed-eval>=0.2.1",
+    "sed-scores-eval==0.0.0",
+    "soundfile>=0.12.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src", "app"]
+include-package-data = true
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]

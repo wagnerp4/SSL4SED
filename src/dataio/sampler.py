@@ -2,7 +2,7 @@ from torch.utils.data import Sampler
 import numpy as np
 
 class ConcatDatasetBatchSampler(Sampler):
-
+    """."""
     def __init__(self, samplers, batch_sizes: (tuple, list), epoch=0) -> None:
         if not isinstance(samplers, (list, tuple)):
             raise ValueError(

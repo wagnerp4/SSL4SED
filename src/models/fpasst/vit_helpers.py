@@ -93,7 +93,7 @@ def load_pretrained(
             progress=_DOWNLOAD_PROGRESS,
         )
 
-    state_dict = torch.load(pretrained_loc, map_location="cpu")
+    state_dict = torch.load(pretrained_loc, map_location="cpu", weights_only=False)
 
     if filter_fn is not None:
         # for backwards compat with filter fn that take one arg, try one first, the two

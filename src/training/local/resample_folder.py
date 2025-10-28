@@ -63,7 +63,16 @@ def _worker_func(input_args):
     Used internally by the pool of multiprocessing workers to resample a given audio file
     """
     f, in_dir, out_dir, target_fs = input_args
-    audio, orig_fs = torchaudio.load(f)
+    try:
+        # Try with soundfile backend first (best compatibility)
+        audio, orig_fs = torchaudio.load(f, backend="soundfile")
+    except Exception as e1:
+        try:
+            # Fall back to sox_io
+            audio, orig_fs = torchaudio.load(f, backend="sox_io")
+        except Exception as e2:
+            print(f"Warning: Failed to read audio '{f}' due to '{e2}'. Skipping.")
+            return
     audio = resample(audio, orig_fs, target_fs)
     os.makedirs(
         Path(os.path.join(out_dir, Path(f).relative_to(Path(in_dir)))).parent,

@@ -7,8 +7,21 @@ stage1_real.yaml
 stage2_real.yaml
 ckpts
 
+# Python
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
 
+# uv
+.venv/
+uv.lock
 
+# Data
 data/
 output/
 related/

@@ -152,7 +152,13 @@ class CRNN(nn.Module):
                 reshape_emb = torch.nn.functional.interpolate(embeddings.unsqueeze(1), size=output_shape, mode='nearest-exact').squeeze(1).transpose(1, 2)
                 x = self.cat_tf(torch.cat((x, reshape_emb), -1))
             elif self.aggregation_type == "pool1d":
-                reshape_emb = torch.nn.functional.adaptive_avg_pool1d(embeddings, x.shape[1]).transpose(1, 2)
+                # MPS doesn't support adaptive pooling when sizes aren't divisible
+                if embeddings.device.type == "mps":
+                    embeddings_cpu = embeddings.cpu()
+                    reshape_emb = torch.nn.functional.adaptive_avg_pool1d(embeddings_cpu, x.shape[1]).transpose(1, 2)
+                    reshape_emb = reshape_emb.to(embeddings.device)
+                else:
+                    reshape_emb = torch.nn.functional.adaptive_avg_pool1d(embeddings, x.shape[1]).transpose(1, 2)
                 x = self.cat_tf(torch.cat((x, reshape_emb), -1))
             else:
                 pass

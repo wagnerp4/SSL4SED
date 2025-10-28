@@ -31,7 +31,7 @@ class ATST(torch.nn.Module):
             pre_path = "data/atst_as2M.ckpt" # "../nnet/ckpts/atst_as2M.ckpt"
             assert os.path.exists(pre_path), "Please make sure you have a default path to load ATST. Please change this path to the atst_as2M.ckpt that you downloaded."
             path = pre_path    # Change path to the atst_as2M.ckpt the downloaded checkpoint from the home page.
-        state_dict = torch.load(path, map_location="cpu")["state_dict"]
+        state_dict = torch.load(path, map_location="cpu", weights_only=False)["state_dict"]
         atst_state_dict = {}
         for k, v in state_dict.items():
             if "model.teacher.encoder." in k:
@@ -57,7 +57,7 @@ class ATST(torch.nn.Module):
         self.atst.load_state_dict(atst_state_dict, strict=True)
         for n, param in self.atst.named_parameters():
             param.requires_grad = False
-        # state_dict = torch.load(path, map_location="cpu")["sed_teacher"]
+        # state_dict = torch.load(path, map_location="cpu", weights_only=False)["sed_teacher"]
         # atst_state_dict = {}
         # for k, v in state_dict.items():
         #     if ("total_ops" in k) or ("total_params" in k):

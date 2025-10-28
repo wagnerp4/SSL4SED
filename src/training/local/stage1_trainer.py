@@ -8,8 +8,8 @@ import torch
 import torch.nn as nn
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 import torchmetrics.classification
-from desed_task.data_augm import mixup
-from desed_task.utils.scaler import TorchScaler
+from src.transforms.data_augm import mixup
+from src.utils.scaler import TorchScaler
 import numpy as np
 import torchmetrics
 
@@ -17,7 +17,7 @@ from .utils import (
     batched_decode_preds,
     log_sedeval_metrics,
 )
-from desed_task.evaluation.evaluation_measures import (
+from src.evaluation.evaluation_measures import (
     compute_per_intersection_macro_f1,
     compute_psds_from_operating_points,
     compute_psds_from_scores
@@ -204,7 +204,7 @@ class SEDTask4(pl.LightningModule):
             raise NotImplementedError
         if self.hparams["scaler"]["savepath"] is not None:
             if os.path.exists(self.hparams["scaler"]["savepath"]):
-                scaler = torch.load(self.hparams["scaler"]["savepath"])
+                scaler = torch.load(self.hparams["scaler"]["savepath"], weights_only=False)
                 print(
                     "Loaded Scaler from previous checkpoint from {}".format(
                         self.hparams["scaler"]["savepath"]
@@ -234,6 +234,24 @@ class SEDTask4(pl.LightningModule):
 
     def detect(self, mel_feats, pretrained_feats, model):
         return model(self.scaler(self.take_log(mel_feats)), pretrained_feats)
+
+    def transfer_batch_to_device(self, batch, device, dataloader_idx):
+        """Override to ensure all tensors are float32 when using MPS backend."""
+        # If on MPS, convert float64 to float32 BEFORE transferring to device
+        if device.type == "mps":
+            def to_float32(x):
+                if isinstance(x, torch.Tensor) and x.dtype == torch.float64:
+                    return x.to(dtype=torch.float32)
+                return x
+            
+            # Apply conversion recursively BEFORE device transfer
+            from lightning_utilities.core.apply_func import apply_to_collection
+            batch = apply_to_collection(batch, torch.Tensor, to_float32)
+        
+        # Now call parent to do the transfer
+        batch = super().transfer_batch_to_device(batch, device, dataloader_idx)
+        
+        return batch
 
     def training_step(self, batch, batch_indx):
 

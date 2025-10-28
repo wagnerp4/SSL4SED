@@ -29,36 +29,36 @@ scaler:
   dims: [1, 2] # dimensions over which normalization is applied
   savepath: ./scaler.ckpt # path to scaler checkpoint
 data: # change with your paths if different.
-  synth_folder: "DESED/audio/strong_synth_16k/train/soundscapes_16k/"
+  synth_folder: "data/DESED/audio/strong_synth_16k/train/soundscapes_16k/"
   # synth_folder_44k: "YOUR_PATH/dcase2021/dataset/audio/train/synthetic21_train/soundscapes/"
-  synth_tsv:  "DESED/annotations/synth_train(10000).tsv"
-  strong_folder: "DESED/audio/strong_real_16k/"
+  synth_tsv:  "data/DESED/annotations/synth_train(10000).tsv"
+  strong_folder: "data/DESED/audio/strong_real_16k/"
   # strong_folder_44k: "YOUR_PATH/dcase2021/dataset/audio/train/strong_label_real/"
-  strong_val_tsv: "DESED/annotations/real_validation(1168).tsv"
-  strong_val_dur: "DESED/annotations/real_validation_durations.tsv"
-  strong_tsv: "DESED/annotations/real_audioset_strong(3373).tsv"
-  weak_folder: "DESED/audio/weak_16k/"
+  strong_val_tsv: "data/DESED/annotations/real_validation(1168).tsv"
+  strong_val_dur: "data/DESED/annotations/real_validation_durations.tsv"
+  strong_tsv: "data/DESED/annotations/real_audioset_strong(3373).tsv"
+  weak_folder: "data/DESED/audio/weak_16k/"
   # weak_folder_44k: "YOUR_PATH/dcase2021/dataset/audio/train/weak/"
-  weak_tsv: "DESED/annotations/weak(1578).tsv"
-  unlabeled_folder: "DESED/audio/weak_16k/"  # Using weak folder as placeholder for unlabeled data
-  # unlabeled_folder_44k: "DESED/audio/train/unlabel_in_domain/"
-  synth_val_folder: "DESED/audio/strong_synth_16k/val/soundscapes_16k/"
+  weak_tsv: "data/DESED/annotations/weak(1578).tsv"
+  unlabeled_folder: "data/DESED/audio/weak_16k/"  # Using weak folder as placeholder for unlabeled data
+  # unlabeled_folder_44k: "data/DESED/audio/train/unlabel_in_domain/"
+  synth_val_folder: "data/DESED/audio/strong_synth_16k/val/soundscapes_16k/"
   # synth_val_folder_44k: "YOUR_PATH/dcase2021/dataset/audio/validation/synthetic21_validation/soundscapes/"
-  synth_val_tsv:  "DESED/annotations/synth_val(2500).tsv"
-  synth_val_dur: "DESED/annotations/synth_val_duration.tsv"
+  synth_val_tsv:  "data/DESED/annotations/synth_val(2500).tsv"
+  synth_val_dur: "data/DESED/annotations/synth_val_duration.tsv"
   # ===== Test set 1: Public eval set =====
   # If you want to check performance on public eval set, uncomment the following lines (make sure you have the data)
-  test_tsv: DESED/annotations/public.tsv
+  test_tsv: data/DESED/annotations/public.tsv
   # test_folder_44k: YOUR_PATH/public_eval/dataset/audio/eval/public/
-  test_folder: DESED/audio/eval/public/
-  test_dur: DESED/annotations/public_dur.tsv
-  # ===== Test set 2: DESED validation set =====
-  # test_folder: "DESED/audio/validation_16k/"
+  test_folder: data/DESED/audio/eval/public/
+  test_dur: data/DESED/annotations/public_dur.tsv
+  # ===== Test set 2: data/DESED validation set =====
+  # test_folder: "data/DESED/audio/validation_16k/"
   # # test_folder_44k: "YOUR_PATH/dcase2021/dataset/audio/validation/validation/"
-  # test_tsv: "DESED/annotations/real_validation(1168).tsv"
-  # test_dur: "DESED/annotations/real_validation_durations.tsv"
+  # test_tsv: "data/DESED/annotations/real_validation(1168).tsv"
+  # test_dur: "data/DESED/annotations/real_validation_durations.tsv"
   #
-  # eval_folder: "DESED/audio/eval21_16k"
+  # eval_folder: "data/DESED/audio/eval21_16k"
   # eval_folder_44k: "YOUR_PATH/dcase2021/dataset/audio/eval21"
   external_folder: # External data path extracted mannually
   external_tsv: 
