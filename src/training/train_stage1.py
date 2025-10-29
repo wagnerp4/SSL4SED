@@ -7,58 +7,17 @@ import yaml
 from src.dataio.sampler import ConcatDatasetBatchSampler
 from src.utils.encoder import ManyHotEncoder
 from src.models.CRNN_e2e import CRNN
-from local.scheduler import ExponentialWarmup
-from local.classes_dict import classes_labels
-from local.stage1_trainer import SEDTask4
+from .local.scheduler import ExponentialWarmup
+from .local.classes_dict import classes_labels
+from .local.stage1_trainer import SEDTask4
 from src.dataio.datasets_atst_sed import StronglyAnnotatedSet, UnlabeledSet, WeakSet
+from src.training.train_utils import separate_opt_params
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 import warnings
 warnings.filterwarnings("ignore")
-
-def separate_opt_params(model):
-    # group parameters
-    cnn_params = []
-    rnn_params = []
-    tfm_params = [[], [], [], [], [], [], [], [], [], [], [], [], [], []]
-    for k, p in model.named_parameters():
-        if "atst_frame" not in k:
-            if "cnn" in k:
-                cnn_params.append(p)
-            else:
-                rnn_params.append(p)
-        else:
-            if "blocks.0." in k:
-                tfm_params[1].append(p)
-            elif "blocks.1." in k:
-                tfm_params[2].append(p)
-            elif "blocks.2." in k:
-                tfm_params[3].append(p)
-            elif "blocks.3." in k:
-                tfm_params[4].append(p)
-            elif "blocks.4." in k:
-                tfm_params[5].append(p)
-            elif "blocks.5." in k:
-                tfm_params[6].append(p)
-            elif "blocks.6." in k:
-                tfm_params[7].append(p)
-            elif "blocks.7." in k:
-                tfm_params[8].append(p)
-            elif "blocks.8" in k:
-                tfm_params[9].append(p)
-            elif "blocks.9." in k:
-                tfm_params[10].append(p)
-            elif "blocks.10." in k:
-                tfm_params[11].append(p)
-            elif "blocks.11." in k:
-                tfm_params[12].append(p)
-            elif ".norm_frame." in k:
-                tfm_params[13].append(p)
-            else:
-                tfm_params[0].append(p)
-    return cnn_params, rnn_params, list(reversed(tfm_params))
 
 def single_run(
     config,
@@ -73,8 +32,7 @@ def single_run(
 ):
     config.update({"log_dir": log_dir})
 
-    # Handle Mac MPS backend: MPS doesn't support float64
-    # When running fast_dev_run on Mac, force float32
+    # macOS
     if fast_dev_run and torch.backends.mps.is_available():
         torch.set_default_dtype(torch.float32)
         print("Mac detected (MPS backend). Using float32 for fast_dev_run compatibility.")
@@ -84,7 +42,7 @@ def single_run(
     if seed:
         pl.seed_everything(seed, workers=True)
 
-    ##### data prep test ##########
+    # data prep test
     encoder = ManyHotEncoder(
         list(classes_labels.keys()),
         audio_len=config["data"]["audio_max_len"],
@@ -94,6 +52,7 @@ def single_run(
         fs=config["data"]["fs"],
     )
 
+    # stage-dependent data prep
     if not evaluation:
         devtest_df = pd.read_csv(config["data"]["test_tsv"], sep="\t")
         devtest_dataset = StronglyAnnotatedSet(
@@ -114,7 +73,8 @@ def single_run(
         )
     test_dataset = devtest_dataset
 
-    ##### model definition  ############
+    # model definition
+    # TODO: wrap the CRNN model
     sed_student = CRNN(
         unfreeze_atst_layer=config["opt"]["tfm_trainable_layers"], 
         **config["net"], 
@@ -123,7 +83,6 @@ def single_run(
         atst_dropout=config["ultra"]["atst_dropout"],)
 
     if test_state_dict is None:
-        ##### data prep train valid ##########
         synth_df = pd.read_csv(config["data"]["synth_tsv"], sep="\t")
         synth_set = StronglyAnnotatedSet(
             config["data"]["synth_folder"],
@@ -133,7 +92,6 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
-
         strong_df = pd.read_csv(config["data"]["strong_tsv"], sep="\t")
         strong_set = StronglyAnnotatedSet(
             config["data"]["strong_folder"],
@@ -143,7 +101,6 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
-
         weak_df = pd.read_csv(config["data"]["weak_tsv"], sep="\t")
         train_weak_df = weak_df.sample(
             frac=config["training"]["weak_split"],
@@ -193,33 +150,22 @@ def single_run(
             feat_params=config["feats"]
         )
         tot_train_data = [strong_set, synth_set, weak_set, unlabeled_set]
-        train_dataset = torch.utils.data.ConcatDataset(tot_train_data)
-
         batch_sizes = config["training"]["batch_size"]
+
+        train_dataset = torch.utils.data.ConcatDataset(tot_train_data)
         samplers = [torch.utils.data.RandomSampler(x) for x in tot_train_data]
         batch_sampler = ConcatDatasetBatchSampler(samplers, batch_sizes)
         valid_dataset = torch.utils.data.ConcatDataset([weak_val, synth_val, strong_val])
 
-        ##### training params and optimizers ############
-        epoch_len = min(
-            [
-                len(tot_train_data[indx])
-                // (
-                    config["training"]["batch_size"][indx]
-                    * config["training"]["accumulate_batches"]
-                )
-                for indx in range(len(tot_train_data))
-            ]
-        )
-
+        # training params and optimizers
+        epoch_len = min([len(tot_train_data[indx]) // 
+                (config["training"]["batch_size"][indx] * config["training"]["accumulate_batches"])
+                for indx in range(len(tot_train_data))])
+        
         cnn_params, rnn_params, tfm_params = separate_opt_params(sed_student)
+        cnn_param_groups = [{"params": cnn_params, "lr": config["opt"]["cnn_lr"]}]
+        rnn_param_groups = [{"params": rnn_params, "lr": config["opt"]["rnn_lr"]}]
 
-        cnn_param_groups = [
-            {"params": cnn_params, "lr": config["opt"]["cnn_lr"]}            
-        ]
-        rnn_param_groups = [
-            {"params": rnn_params, "lr": config["opt"]["rnn_lr"]},
-        ]
         tfm_trainable_params = []
         trainable_layers = config["opt"]["tfm_trainable_layers"]
         for i in range(trainable_layers):
@@ -232,19 +178,19 @@ def single_run(
         scale_lrs = [init_lr * (lr_scale ** i) for i in range(trainable_layers)]
         tfm_param_groups = [ {"params": tfm_trainable_params[i], "lr": scale_lrs[i]} for i in range(len(tfm_trainable_params)) ]
         max_lrs = [ cnn_param_groups[0]["lr"] ] + [ rnn_param_groups[0]["lr"] ] + [ x["lr"] for x in tfm_param_groups ]
+
         param_groups = cnn_param_groups + rnn_param_groups + tfm_param_groups
-        opt = torch.optim.Adam(param_groups, betas=(0.9, 0.999))
-        opt = [opt]        
+        opt = torch.optim.Adam(param_groups, betas=(0.9, 0.999)) # TODO: wrap the optimizer
+        opt = [opt]
         exp_steps = config["training"]["n_epochs_warmup"] * epoch_len
         tot_steps = config["training"]["n_epochs"] * epoch_len
 
+        # TODO: wrap the scheduler
         exp_scheduler = {
             "scheduler": ExponentialWarmup(opt[0], max_lrs, exp_steps, tot_steps=tot_steps, cos_down=False),
             "interval": "step",
         }
         exp_scheduler = [exp_scheduler]
-        
-        # init opt
         init_lrs = exp_scheduler[0]["scheduler"]._get_lr()
         for i, lr in enumerate(init_lrs):
             opt[0].param_groups[i]["lr"] = lr
@@ -294,7 +240,7 @@ def single_run(
         evaluation=evaluation
     )
 
-    # Not using the fast_dev_run of Trainer because creates a DummyLogger so cannot check problems with the Logger
+    # DummyLogger -> cannot check Logger
     if fast_dev_run:
         log_every_n_steps = 1
         limit_train_batches = 2
@@ -310,7 +256,6 @@ def single_run(
 
     accelerator = "gpu"
     devices = gpus
-
     trainer = pl.Trainer(
             precision=config["training"]["precision"],
             max_epochs=n_epochs,
@@ -331,9 +276,8 @@ def single_run(
             enable_progress_bar=config["training"]["enable_progress_bar"],
             use_distributed_sampler=False
         )
+    
     if test_state_dict is None:
-
-        # start tracking energy consumption
         trainer.fit(desed_training, ckpt_path=checkpoint_resume)
         best_path = trainer.checkpoint_callback.best_model_path
         print(f"best model: {best_path}")

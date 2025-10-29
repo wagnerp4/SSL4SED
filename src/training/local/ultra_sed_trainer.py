@@ -194,7 +194,6 @@ class SEDTask4(pl.LightningModule):
                 self.hparams["scaler"]["normtype"],
                 self.hparams["scaler"]["dims"],
             )
-
             return scaler
         elif self.hparams["scaler"]["statistic"] == "dataset":
             # we fit the scaler
@@ -434,6 +433,31 @@ class SEDTask4(pl.LightningModule):
             alpha_st=1,
             )
 
+    def _align_scores_with_ground_truth(self, scores_dict, ground_truth, audio_durations):
+        if scores_dict is None:
+            return {}, {}, {}
+        gt_ids = set(ground_truth.keys())
+        aligned_scores = {}
+        for sid, sdf in scores_dict.items():
+            target_id = None
+            if sid in gt_ids:
+                target_id = sid
+            elif sid.endswith("_16k") and sid[:-4] in gt_ids:
+                target_id = sid[:-4]
+            elif (sid + "_16k") in gt_ids:
+                target_id = sid + "_16k"
+            else:
+                target_id = sid
+            aligned_scores[target_id] = sdf
+
+        common_ids = set(aligned_scores.keys()) & gt_ids
+
+        aligned_scores = {k: aligned_scores[k] for k in common_ids}
+        filtered_gt = {k: ground_truth[k] for k in common_ids}
+        filtered_durs = {k: audio_durations[k] for k in common_ids if k in audio_durations}
+
+        return aligned_scores, filtered_gt, filtered_durs
+
     def on_validation_epoch_end(self):
         weak_student_f1_macro = self.get_weak_student_f1_seg_macro.compute()
         weak_teacher_f1_macro = self.get_weak_teacher_f1_seg_macro.compute()
@@ -448,10 +472,26 @@ class SEDTask4(pl.LightningModule):
             audio_id: audio_durations[audio_id]
             for audio_id in ground_truth.keys()
         }
-        psds1_student_sed_scores_real = self.psds1(self.val_scores_postprocessed_buffer_student_real, ground_truth, audio_durations)
-        psds2_student_sed_scores_real = self.psds2(self.val_scores_postprocessed_buffer_student_real, ground_truth, audio_durations)
-        psds1_teacher_sed_scores_real = self.psds1(self.val_scores_postprocessed_buffer_teacher_real, ground_truth, audio_durations)
-        psds2_teacher_sed_scores_real = self.psds2(self.val_scores_postprocessed_buffer_teacher_real, ground_truth, audio_durations)
+        scores_student_real, gt_real, dur_real = self._align_scores_with_ground_truth(
+            self.val_scores_postprocessed_buffer_student_real, ground_truth, audio_durations
+        )
+        scores_teacher_real, gt_real_t, dur_real_t = self._align_scores_with_ground_truth(
+            self.val_scores_postprocessed_buffer_teacher_real, ground_truth, audio_durations
+        )
+        
+        if len(scores_student_real) == 0 or len(gt_real) == 0:
+            psds1_student_sed_scores_real = 0.0
+            psds2_student_sed_scores_real = 0.0
+        else:
+            psds1_student_sed_scores_real = self.psds1(scores_student_real, gt_real, dur_real)
+            psds2_student_sed_scores_real = self.psds2(scores_student_real, gt_real, dur_real)
+            
+        if len(scores_teacher_real) == 0 or len(gt_real_t) == 0:
+            psds1_teacher_sed_scores_real = 0.0
+            psds2_teacher_sed_scores_real = 0.0
+        else:
+            psds1_teacher_sed_scores_real = self.psds1(scores_teacher_real, gt_real_t, dur_real_t)
+            psds2_teacher_sed_scores_real = self.psds2(scores_teacher_real, gt_real_t, dur_real_t)
         
         # Strong synthetic
         ground_truth = sed_scores_eval.io.read_ground_truth_events(self.hparams["data"]["synth_val_tsv"])
@@ -465,31 +505,51 @@ class SEDTask4(pl.LightningModule):
             audio_id: audio_durations[audio_id]
             for audio_id in ground_truth.keys()
         }
-        psds1_student_sed_scores_synth = self.psds1(self.val_scores_postprocessed_buffer_student_synth, ground_truth, audio_durations)
-        psds2_student_sed_scores_synth = self.psds2(self.val_scores_postprocessed_buffer_student_synth, ground_truth, audio_durations)
-        psds1_teacher_sed_scores_synth = self.psds1(self.val_scores_postprocessed_buffer_teacher_synth, ground_truth, audio_durations)
-        psds2_teacher_sed_scores_synth = self.psds2(self.val_scores_postprocessed_buffer_teacher_synth, ground_truth, audio_durations)
+        scores_student_synth, gt_synth, dur_synth = self._align_scores_with_ground_truth(
+            self.val_scores_postprocessed_buffer_student_synth, ground_truth, audio_durations
+        )
+        scores_teacher_synth, gt_synth_t, dur_synth_t = self._align_scores_with_ground_truth(
+            self.val_scores_postprocessed_buffer_teacher_synth, ground_truth, audio_durations
+        )
+        if len(scores_student_synth) == 0 or len(gt_synth) == 0:
+            psds1_student_sed_scores_synth = 0.0
+            psds2_student_sed_scores_synth = 0.0
+        else:
+            psds1_student_sed_scores_synth = self.psds1(scores_student_synth, gt_synth, dur_synth)
+            psds2_student_sed_scores_synth = self.psds2(scores_student_synth, gt_synth, dur_synth)
+            
+        if len(scores_teacher_synth) == 0 or len(gt_synth_t) == 0:
+            psds1_teacher_sed_scores_synth = 0.0
+            psds2_teacher_sed_scores_synth = 0.0
+        else:
+            psds1_teacher_sed_scores_synth = self.psds1(scores_teacher_synth, gt_synth_t, dur_synth_t)
+            psds2_teacher_sed_scores_synth = self.psds2(scores_teacher_synth, gt_synth_t, dur_synth_t)
 
-        real_teacher_weak_loss = sum(self.val_loss_weak_teacher) / len(self.val_loss_weak_teacher)
+        real_teacher_weak_loss = sum(self.val_loss_weak_teacher) / len(self.val_loss_weak_teacher) if len(self.val_loss_weak_teacher) > 0 else 0.0
         obj_metric = psds1_teacher_sed_scores_synth + psds2_teacher_sed_scores_synth
 
         self.log("val/obj_metric", obj_metric, prog_bar=True)
         self.log("val/weak/student/macro_F1", weak_student_f1_macro)
-        self.log("val/weak/student/loss_weak", sum(self.val_loss_weak_student) / len(self.val_loss_weak_student))
+        val_weak_student_loss = sum(self.val_loss_weak_student) / len(self.val_loss_weak_student) if len(self.val_loss_weak_student) > 0 else 0.0
+        self.log("val/weak/student/loss_weak", val_weak_student_loss)
         self.log("val/weak/teacher/loss_weak", real_teacher_weak_loss)
         self.log("val/real/student/psds1_sed_scores_eval", psds1_student_sed_scores_real)
         self.log("val/real/student/psds2_sed_scores_eval", psds2_student_sed_scores_real)
         self.log("val/synth/student/psds1_sed_scores_eval", psds1_student_sed_scores_synth)
         self.log("val/synth/student/psds2_sed_scores_eval", psds2_student_sed_scores_synth)
-        self.log("val/real/student/loss_strong", sum(self.val_loss_real_student) / len(self.val_loss_real_student))
-        self.log("val/synth/student/loss_strong", sum(self.val_loss_synth_student) / len(self.val_loss_synth_student))
+        val_real_student_loss = sum(self.val_loss_real_student) / len(self.val_loss_real_student) if len(self.val_loss_real_student) > 0 else 0.0
+        self.log("val/real/student/loss_strong", val_real_student_loss)
+        val_synth_student_loss = sum(self.val_loss_synth_student) / len(self.val_loss_synth_student) if len(self.val_loss_synth_student) > 0 else 0.0
+        self.log("val/synth/student/loss_strong", val_synth_student_loss)
         self.log("val/weak/teacher/macro_F1", weak_teacher_f1_macro)
         self.log("val/real/teacher/psds1_sed_scores_eval", psds1_teacher_sed_scores_real)
         self.log("val/real/teacher/psds2_sed_scores_eval", psds2_teacher_sed_scores_real)
         self.log("val/synth/teacher/psds1_sed_scores_eval", psds1_teacher_sed_scores_synth)
         self.log("val/synth/teacher/psds2_sed_scores_eval", psds2_teacher_sed_scores_synth)
-        self.log("val/real/teacher/loss_strong", sum(self.val_loss_real_teacher) / len(self.val_loss_real_teacher))
-        self.log("val/synth/teacher/loss_strong", sum(self.val_loss_synth_teacher) / len(self.val_loss_synth_teacher))
+        val_real_teacher_loss = sum(self.val_loss_real_teacher) / len(self.val_loss_real_teacher) if len(self.val_loss_real_teacher) > 0 else 0.0
+        self.log("val/real/teacher/loss_strong", val_real_teacher_loss)
+        val_synth_teacher_loss = sum(self.val_loss_synth_teacher) / len(self.val_loss_synth_teacher) if len(self.val_loss_synth_teacher) > 0 else 0.0
+        self.log("val/synth/teacher/loss_strong", val_synth_teacher_loss)
 
         # free the buffers
         self.val_scores_postprocessed_buffer_student_synth = {}

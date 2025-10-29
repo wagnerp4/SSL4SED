@@ -1,5 +1,4 @@
 import os
-
 import numpy as np
 import pandas as pd
 import psds_eval
@@ -7,6 +6,9 @@ import sed_eval
 from psds_eval import PSDSEval, plot_psd_roc
 import sed_scores_eval
 
+# TODOs:
+
+# add sebb based eval
 
 def get_event_list_current_file(df, fname):
     """
@@ -28,24 +30,7 @@ def get_event_list_current_file(df, fname):
 
     return event_list_for_current_file
 
-
-def psds_results(psds_obj):
-    """ Compute psds scores
-    Args:
-        psds_obj: psds_eval.PSDSEval object with operating points.
-    Returns:
-    """
-    try:
-        psds_score = psds_obj.psds(alpha_ct=0, alpha_st=0, max_efpr=100)
-        print(f"\nPSD-Score (0, 0, 100): {psds_score.value:.5f}")
-        psds_score = psds_obj.psds(alpha_ct=1, alpha_st=0, max_efpr=100)
-        print(f"\nPSD-Score (1, 0, 100): {psds_score.value:.5f}")
-        psds_score = psds_obj.psds(alpha_ct=0, alpha_st=1, max_efpr=100)
-        print(f"\nPSD-Score (0, 1, 100): {psds_score.value:.5f}")
-    except psds_eval.psds.PSDSEvalError as e:
-        print("psds did not work ....")
-        raise EnvironmentError
-
+# frame-based metrics
 
 def event_based_evaluation_df(
     reference, estimated, t_collar=0.200, percentage_of_length=0.2
@@ -92,7 +77,6 @@ def event_based_evaluation_df(
 
     return event_based_metric
 
-
 def segment_based_evaluation_df(reference, estimated, time_resolution=1.0):
     """ Calculate SegmentBasedMetrics given a reference and estimated dataframe
 
@@ -131,6 +115,7 @@ def segment_based_evaluation_df(reference, estimated, time_resolution=1.0):
 
     return segment_based_metric
 
+# intersection based metrics
 
 def compute_sed_eval_metrics(predictions, groundtruth):
     """ Compute sed_eval metrics event based and segment based with default parameters used in the task.
@@ -148,7 +133,6 @@ def compute_sed_eval_metrics(predictions, groundtruth):
     )
 
     return metric_event, metric_segment
-
 
 def compute_per_intersection_macro_f1(
     prediction_dfs,
@@ -193,7 +177,6 @@ def compute_per_intersection_macro_f1(
         psds_macro_f1.append(threshold_f1)
     psds_macro_f1 = np.mean(psds_macro_f1)
     return psds_macro_f1
-
 
 def compute_psds_from_operating_points(
     prediction_dfs,
@@ -255,7 +238,6 @@ def compute_psds_from_operating_points(
 
     return psds_score.value
 
-
 def compute_psds_from_scores(
     scores,
     ground_truth_file,
@@ -294,3 +276,20 @@ def compute_psds_from_scores(
             psds=psds,
         )
     return psds
+
+def psds_results(psds_obj):
+    """ Compute psds scores
+    Args:
+        psds_obj: psds_eval.PSDSEval object with operating points.
+    Returns:
+    """
+    try:
+        psds_score = psds_obj.psds(alpha_ct=0, alpha_st=0, max_efpr=100)
+        print(f"\nPSD-Score (0, 0, 100): {psds_score.value:.5f}")
+        psds_score = psds_obj.psds(alpha_ct=1, alpha_st=0, max_efpr=100)
+        print(f"\nPSD-Score (1, 0, 100): {psds_score.value:.5f}")
+        psds_score = psds_obj.psds(alpha_ct=0, alpha_st=1, max_efpr=100)
+        print(f"\nPSD-Score (0, 1, 100): {psds_score.value:.5f}")
+    except psds_eval.psds.PSDSEvalError as e:
+        print("psds did not work ....")
+        raise EnvironmentError

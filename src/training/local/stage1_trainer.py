@@ -617,28 +617,33 @@ class SEDTask4(pl.LightningModule):
             audio_id: audio_durations[audio_id]
             for audio_id in ground_truth.keys()
         }
-        real_teacher_weak_loss = sum(self.val_loss_weak_teacher) / len(self.val_loss_weak_teacher)
-        real_teacher_strong_loss = sum(self.val_loss_real_teacher) / len(self.val_loss_real_teacher)
+        real_teacher_weak_loss = sum(self.val_loss_weak_teacher) / len(self.val_loss_weak_teacher) if len(self.val_loss_weak_teacher) > 0 else 0.0
+        real_teacher_strong_loss = sum(self.val_loss_real_teacher) / len(self.val_loss_real_teacher) if len(self.val_loss_real_teacher) > 0 else 0.0
         real_teacher_loss = (real_teacher_weak_loss + real_teacher_strong_loss) / 2
         obj_metric = real_teacher_loss
 
         self.log("val/obj_metric", obj_metric, prog_bar=True)
         self.log("val/weak/student/macro_F1", weak_student_f1_macro)
-        self.log("val/weak/student/loss_weak", sum(self.val_loss_weak_student) / len(self.val_loss_weak_student))
+        val_weak_student_loss = sum(self.val_loss_weak_student) / len(self.val_loss_weak_student) if len(self.val_loss_weak_student) > 0 else 0.0
+        self.log("val/weak/student/loss_weak", val_weak_student_loss)
         self.log("val/weak/teacher/loss_weak", real_teacher_weak_loss)
         self.log("val/real/student/psds1_sed_scores_eval", psds1_student_sed_scores_real)
         self.log("val/real/student/psds2_sed_scores_eval", psds2_student_sed_scores_real)
         self.log("val/synth/student/psds1_sed_scores_eval", psds1_student_sed_scores_synth)
         self.log("val/synth/student/psds2_sed_scores_eval", psds2_student_sed_scores_synth)
-        self.log("val/real/student/loss_strong", sum(self.val_loss_real_student) / len(self.val_loss_real_student))
-        self.log("val/synth/student/loss_strong", sum(self.val_loss_synth_student) / len(self.val_loss_synth_student))
+        val_real_student_loss = sum(self.val_loss_real_student) / len(self.val_loss_real_student) if len(self.val_loss_real_student) > 0 else 0.0
+        self.log("val/real/student/loss_strong", val_real_student_loss)
+        val_synth_student_loss = sum(self.val_loss_synth_student) / len(self.val_loss_synth_student) if len(self.val_loss_synth_student) > 0 else 0.0
+        self.log("val/synth/student/loss_strong", val_synth_student_loss)
         self.log("val/weak/teacher/macro_F1", weak_teacher_f1_macro)
         self.log("val/real/teacher/psds1_sed_scores_eval", psds1_teacher_sed_scores_real)
         self.log("val/real/teacher/psds2_sed_scores_eval", psds2_teacher_sed_scores_real)
         self.log("val/synth/teacher/psds1_sed_scores_eval", psds1_teacher_sed_scores_synth)
         self.log("val/synth/teacher/psds2_sed_scores_eval", psds2_teacher_sed_scores_synth)
-        self.log("val/real/teacher/loss_strong", sum(self.val_loss_real_teacher) / len(self.val_loss_real_teacher))
-        self.log("val/synth/teacher/loss_strong", sum(self.val_loss_synth_teacher) / len(self.val_loss_synth_teacher))
+        val_real_teacher_loss = sum(self.val_loss_real_teacher) / len(self.val_loss_real_teacher) if len(self.val_loss_real_teacher) > 0 else 0.0
+        self.log("val/real/teacher/loss_strong", val_real_teacher_loss)
+        val_synth_teacher_loss = sum(self.val_loss_synth_teacher) / len(self.val_loss_synth_teacher) if len(self.val_loss_synth_teacher) > 0 else 0.0
+        self.log("val/synth/teacher/loss_strong", val_synth_teacher_loss)
 
         # free the buffers
         self.val_scores_postprocessed_buffer_student_synth = {}

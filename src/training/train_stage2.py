@@ -8,57 +8,16 @@ from src.dataio.sampler import ConcatDatasetBatchSampler
 from src.dataio.datasets_atst_sed import StronglyAnnotatedSet, UnlabeledSet, WeakSet
 from src.utils.encoder import ManyHotEncoder
 from src.models.CRNN_e2e import CRNN
-from local.scheduler import ExponentialWarmup
-from local.classes_dict import classes_labels
-from local.stage2_trainer import SEDICT
+from .local.scheduler import ExponentialWarmup
+from .local.classes_dict import classes_labels
+from .local.stage2_trainer import SEDICT
+from src.training.train_utils import separate_opt_params
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 import warnings
 warnings.filterwarnings("ignore")
-
-def separate_opt_params(model):
-    # group parameters
-    cnn_params = []
-    rnn_params = []
-    tfm_params = [[], [], [], [], [], [], [], [], [], [], [], [], [], []]
-    for k, p in model.named_parameters():
-        if "atst_frame" not in k:
-            if "cnn" in k:
-                cnn_params.append(p)
-            else:
-                rnn_params.append(p)
-        else:
-            if "blocks.0." in k:
-                tfm_params[1].append(p)
-            elif "blocks.1." in k:
-                tfm_params[2].append(p)
-            elif "blocks.2." in k:
-                tfm_params[3].append(p)
-            elif "blocks.3." in k:
-                tfm_params[4].append(p)
-            elif "blocks.4." in k:
-                tfm_params[5].append(p)
-            elif "blocks.5." in k:
-                tfm_params[6].append(p)
-            elif "blocks.6." in k:
-                tfm_params[7].append(p)
-            elif "blocks.7." in k:
-                tfm_params[8].append(p)
-            elif "blocks.8" in k:
-                tfm_params[9].append(p)
-            elif "blocks.9." in k:
-                tfm_params[10].append(p)
-            elif "blocks.10." in k:
-                tfm_params[11].append(p)
-            elif "blocks.11." in k:
-                tfm_params[12].append(p)
-            elif ".norm_frame." in k:
-                tfm_params[13].append(p)
-            else:
-                tfm_params[0].append(p)
-    return cnn_params, rnn_params, list(reversed(tfm_params))
 
 def single_run(
     config,
@@ -73,8 +32,7 @@ def single_run(
 ):
     config.update({"log_dir": log_dir})
 
-    # Handle Mac MPS backend: MPS doesn't support float64
-    # When running fast_dev_run on Mac, force float32
+    # macOS
     if fast_dev_run and torch.backends.mps.is_available():
         torch.set_default_dtype(torch.float32)
         print("Mac detected (MPS backend). Using float32 for fast_dev_run compatibility.")
@@ -221,32 +179,19 @@ def single_run(
             feat_params=config["feats"]
         )
         tot_train_data = [strong_set, synth_set, weak_set, unlabeled_set]
-        train_dataset = torch.utils.data.ConcatDataset(tot_train_data)
         batch_sizes = config["training"]["batch_size"]
+        train_dataset = torch.utils.data.ConcatDataset(tot_train_data)
         samplers = [torch.utils.data.RandomSampler(x) for x in tot_train_data]
         batch_sampler = ConcatDatasetBatchSampler(samplers, batch_sizes)
         valid_dataset = torch.utils.data.ConcatDataset([weak_val, synth_val, strong_val])
 
-        ##### training params and optimizers ############
-        epoch_len = min(
-            [
-                len(tot_train_data[indx])
-                // (
-                    config["training"]["batch_size"][indx]
-                    * config["training"]["accumulate_batches"]
-                )
-                for indx in range(len(tot_train_data))
-            ]
-        )
-
+        # training params and optimizers
+        epoch_len = min([len(tot_train_data[indx]) // 
+                (config["training"]["batch_size"][indx] * config["training"]["accumulate_batches"])
+                for indx in range(len(tot_train_data))])
         cnn_params, rnn_params, tfm_params = separate_opt_params(sed_student)
-
-        cnn_param_groups = [
-            {"params": cnn_params, "lr": config["opt"]["cnn_lr"]}            
-        ]
-        rnn_param_groups = [
-            {"params": rnn_params, "lr": config["opt"]["rnn_lr"]},
-        ]
+        cnn_param_groups = [{"params": cnn_params, "lr": config["opt"]["cnn_lr"]}]
+        rnn_param_groups = [{"params": rnn_params, "lr": config["opt"]["rnn_lr"]}]
         tfm_trainable_params = []
         trainable_layers = config["opt"]["tfm_trainable_layers"]
         for i in range(trainable_layers):
@@ -368,16 +313,22 @@ def single_run(
         trainer.fit(desed_training, ckpt_path=checkpoint_resume)
         best_path = trainer.checkpoint_callback.best_model_path
         print(f"best model: {best_path}")
-        test_state_dict = torch.load(best_path, weights_only=False)["state_dict"]
+        
+        # Handle case where no checkpoint was saved (e.g., in fast_dev_run mode)
+        if not best_path or not os.path.exists(best_path):
+            print("No checkpoint saved during training, using current model state for testing")
+            test_state_dict = desed_training.state_dict()
+        else:
+            test_state_dict = torch.load(best_path, weights_only=False)["state_dict"]
 
     desed_training.load_state_dict(test_state_dict)
     trainer.test(desed_training)
 
-def prepare_run(argv=None):
+def parse_args(argv=None):
     parser = argparse.ArgumentParser("Training a SED system for DESED Task")
     parser.add_argument(
         "--conf_file",
-        default="./train/confs/stage2.yaml",
+        default="src/training/confs/stage2.yaml",
         help="The configuration file with all the experiment parameters.",
     )
     parser.add_argument(
@@ -460,8 +411,11 @@ def prepare_run(argv=None):
         type=float,
         help="Fraction of training and validation data to use (0.0-1.0). Useful for quick testing."
     )
-
     args = parser.parse_args(argv)
+    return args
+
+def prepare_run(argv=None):
+    args = parse_args(argv)
     args.log_dir += args.prefix
     with open(args.conf_file, "r") as f:
         configs = yaml.safe_load(f)
@@ -499,15 +453,12 @@ def prepare_run(argv=None):
     if evaluation:
         configs["training"]["batch_size_val"] = 1
 
-    test_only = test_from_checkpoint is not None
+    # test_only = test_from_checkpoint is not None
     return configs, args, test_model_state_dict, evaluation
 
 if __name__ == "__main__":
     torch.set_float32_matmul_precision('high')
-    # prepare run
     configs, args, test_model_state_dict, evaluation = prepare_run()
-
-    # launch run
     single_run(
         configs,
         args.log_dir,

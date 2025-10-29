@@ -56,7 +56,6 @@ def to_mono(mixture, random_ch=False):
 
 
 def pad_audio(audio, target_len, fs):
-    
     if audio.shape[-1] < target_len:
         audio = torch.nn.functional.pad(
             audio, (0, target_len - audio.shape[-1]), mode="constant"
@@ -165,6 +164,7 @@ class ATSTTransform:
 
 # TODO: Create DatasetWrapper 
 class StronglyAnnotatedSet(Dataset):
+    
     def __init__(
         self,
         audio_folder,
