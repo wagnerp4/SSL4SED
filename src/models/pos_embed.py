@@ -11,6 +11,13 @@ import numpy as np
 
 import torch
 
+
+# TODO:
+# RoPE
+# APE
+# RPE
+# ...
+
 # --------------------------------------------------------
 # 2D sine-cosine position embedding
 # References:

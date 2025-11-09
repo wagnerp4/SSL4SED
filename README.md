@@ -1,12 +1,6 @@
-</div>
+# SSL4SED
 
-# Introduction
-
-SSL4SED stands for Self-supervised Learning for Sound Event Detection. 
-
-The repository aims to provide a robust optimization framework for training machine and deep learning models with differing supervisory signals.
-
-The repository is based on https://github.com/Audio-WestlakeU/ATST-SED to ensure a comparability and reproducability basis for experiments.
+Extension of https://github.com/Audio-WestlakeU/ATST-SED to ensure a comparability and reproducability basis for experiments.
 
 # Get started
 
@@ -53,7 +47,7 @@ The authors of ATST-SED also supply a pretrained stage 1 ckpt for you to fine-tu
 python train_stage2.py --gpus YOUR_DEVICE_ID,
 ```
 
-## Bonus:
+## Helpful commands:
 
 ### Support testing training on laptop
 ```bash
@@ -70,10 +64,3 @@ python src/dataio/verify_dataset.py --fail-on-missing
 # To check custom pairs:
 python src/dataio/verify_dataset.py --tsv data/DESED/annotations/weak.tsv:data/DESED/audio/weak_16k
 ```
-export MallocStackLoggingNoCompact=1
-
-## Update Notice:
-- Implement interface for more datasets and data acquisition methods (e.g. zenodo) to allow more flexible useage
-- Overwork config system to be more flexible
-- Create docs, workflows, tests
-- Add + integrate models (ongoing) -> wrap functionality

@@ -23,6 +23,15 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 warnings.filterwarnings("ignore")
 
+# TODO:
+# - [ ] print split sizes
+# - [ ] cleanup exp directory
+# - [ ] improve terminal logging
+# - [ ] improve plots
+# - [ ] decouple data loading part in single_run
+# - [ ] finally: combine stage 1 and stage 2 in one script?
+#   - [ ] add option to run stage 1 or stage 2
+
 
 def _compare_missing_sources(label, dataset_missing, tsv_path, audio_folder, root_path):
     if tsv_path is None or audio_folder is None:
@@ -48,7 +57,6 @@ def _compare_missing_sources(label, dataset_missing, tsv_path, audio_folder, roo
         print(f"[data-check:{label}] Verification reported {len(extra_verify)} files not observed during dataset build (possibly unused rows or naming mismatches):")
         for path in sorted(extra_verify):
             _print_compact_path(path, root_path)
-
 
 def _print_compact_path(path, root_path):
     try:
@@ -231,14 +239,20 @@ def single_run(
                 project_root,
             )
 
-        print("Preparing unlabeled training dataset")
-        unlabeled_set = UnlabeledSet(
-            config["data"]["unlabeled_folder"],
-            encoder,
-            return_filename=True,
-            pad_to=config["data"]["audio_max_len"],
-            feat_params=config["feats"]
-        )
+        use_unlabeled = config["training"].get("use_unlabeled", True) and bool(config["data"].get("unlabeled_folder"))
+        if use_unlabeled:
+            print("Preparing unlabeled training dataset")
+            unlabeled_set = UnlabeledSet(
+                config["data"]["unlabeled_folder"],
+                encoder,
+                return_filename=True,
+                pad_to=config["data"]["audio_max_len"],
+                feat_params=config["feats"]
+            )
+        else:
+            print("Skipping unlabeled training dataset")
+            unlabeled_set = None
+            # TODO: Provide unlabeled dataset path and enable consistency training when data is available
 
         print("Preparing real validation dataset")
         strong_df_val = pd.read_csv(config["data"]["strong_val_tsv"], sep="\t")
@@ -280,8 +294,12 @@ def single_run(
             )
 
         print("Combining training datasets")
-        tot_train_data = [strong_set, synth_set, weak_set, unlabeled_set]
-        batch_sizes = config["training"]["batch_size"]
+        if use_unlabeled and unlabeled_set is not None:
+            tot_train_data = [strong_set, synth_set, weak_set, unlabeled_set]
+            batch_sizes = config["training"]["batch_size"]
+        else:
+            tot_train_data = [strong_set, synth_set, weak_set]
+            batch_sizes = config["training"]["batch_size"][:3]
         train_dataset = torch.utils.data.ConcatDataset(tot_train_data)
         samplers = [torch.utils.data.RandomSampler(x) for x in tot_train_data]
         batch_sampler = ConcatDatasetBatchSampler(samplers, batch_sizes)
@@ -289,10 +307,11 @@ def single_run(
 
         ###
 
-        # training params and optimizers
+        # training params
         epoch_len = min([len(tot_train_data[indx]) // 
                 (config["training"]["batch_size"][indx] * config["training"]["accumulate_batches"])
                 for indx in range(len(tot_train_data))])
+        print(f"Epoch length: {epoch_len}")
         cnn_params, rnn_params, tfm_params = separate_opt_params(sed_student)
         cnn_param_groups = [{"params": cnn_params, "lr": config["opt"]["cnn_lr"]}]
         rnn_param_groups = [{"params": rnn_params, "lr": config["opt"]["rnn_lr"]}]
@@ -302,17 +321,18 @@ def single_run(
             tfm_trainable_params.append(tfm_params[i])
             for p in tfm_params[i]:
                 p.requires_grad = True
-
         init_lr = config["opt"]["tfm_lr"]
         lr_scale = config["opt"]["tfm_lr_scale"]
         scale_lrs = [init_lr * (lr_scale ** i) for i in range(trainable_layers)]
         tfm_param_groups = [ {"params": tfm_trainable_params[i], "lr": scale_lrs[i]} for i in range(len(tfm_trainable_params)) ]
         max_lrs = [ cnn_param_groups[0]["lr"] ] + [ rnn_param_groups[0]["lr"] ] + [ x["lr"] for x in tfm_param_groups ]
 
+        # optimizer
         param_groups = cnn_param_groups + rnn_param_groups + tfm_param_groups
         opt = torch.optim.Adam(param_groups, betas=(0.9, 0.999))
         opt = [opt]
 
+        # scheduler
         exp_steps = config["training"]["n_epochs_warmup"] * epoch_len
         tot_steps = config["training"]["n_epochs"] * epoch_len
         exp_scheduler = {
@@ -320,12 +340,11 @@ def single_run(
             "interval": "step",
         }
         exp_scheduler = [exp_scheduler]
-        
-        # init opt
         init_lrs = exp_scheduler[0]["scheduler"]._get_lr()
         for i, lr in enumerate(init_lrs):
             opt[0].param_groups[i]["lr"] = lr
-
+        
+        # logger
         logger = TensorBoardLogger(
             os.path.dirname(config["log_dir"]), config["log_dir"].split("/")[-1],
         )
@@ -372,7 +391,6 @@ def single_run(
         sed_teacher=sed_teacher
     )
 
-    # Not using the fast_dev_run of Trainer because creates a DummyLogger so cannot check problems with the Logger
     if fast_dev_run:
         flush_logs_every_n_steps = 1
         log_every_n_steps = 1
@@ -388,29 +406,33 @@ def single_run(
         limit_test_batches = 1.0
         n_epochs = config["training"]["n_epochs"]
 
+    # Trainer
     devices=gpus
     accelerator="gpu"
-
-    trainer = pl.Trainer(
-        precision=config["training"]["precision"],
-        max_epochs=n_epochs,
-        callbacks=callbacks,
-        accelerator=accelerator,
-        devices=devices,
-        strategy=config["training"].get("backend"),
-        accumulate_grad_batches=config["training"]["accumulate_batches"],
-        logger=logger,
-        gradient_clip_val=config["training"]["gradient_clip"],
-        check_val_every_n_epoch=config["training"]["validation_interval"],
-        num_sanity_val_steps=0,
-        log_every_n_steps=log_every_n_steps,
-        limit_train_batches=limit_train_batches,
-        limit_val_batches=limit_val_batches,
-        limit_test_batches=limit_test_batches,
-        deterministic=config["training"]["deterministic"],
-        enable_progress_bar=config["training"]["enable_progress_bar"],
-        use_distributed_sampler=False
-    )
+    trainer_kwargs = {
+        "precision": config["training"]["precision"],
+        "max_epochs": n_epochs,
+        "callbacks": callbacks,
+        "accelerator": accelerator,
+        "devices": devices,
+        "strategy": config["training"].get("backend"),
+        "accumulate_grad_batches": config["training"]["accumulate_batches"],
+        "logger": logger,
+        "gradient_clip_val": config["training"]["gradient_clip"],
+        "check_val_every_n_epoch": config["training"]["validation_interval"],
+        "num_sanity_val_steps": 0,
+        "log_every_n_steps": log_every_n_steps,
+        "deterministic": config["training"]["deterministic"],
+        "enable_progress_bar": config["training"]["enable_progress_bar"],
+        "use_distributed_sampler": False,
+    }
+    if limit_train_batches != 1.0:
+        trainer_kwargs["limit_train_batches"] = limit_train_batches
+    if limit_val_batches != 1.0:
+        trainer_kwargs["limit_val_batches"] = limit_val_batches
+    if limit_test_batches != 1.0:
+        trainer_kwargs["limit_test_batches"] = limit_test_batches
+    trainer = pl.Trainer(**trainer_kwargs)
     
     if test_state_dict is None:
         trainer.fit(desed_training, ckpt_path=checkpoint_resume)

@@ -275,7 +275,6 @@ class Task4CRNNEmbeddingsWrapper(nn.Module):
             print("Embedding model output:", embeddings.size())
 
         if self.embed_pool == "aap":
-            # MPS doesn't support adaptive pooling when sizes aren't divisible
             if embeddings.device.type == "mps":
                 embeddings_cpu = embeddings.cpu()
                 embeddings_pooled = torch.nn.functional.adaptive_avg_pool1d(embeddings_cpu, frames).transpose(1, 2)
@@ -371,5 +370,3 @@ class Task4CRNNEmbeddingsWrapper(nn.Module):
             return self._get_logits_one_head(
                 x, pad_mask, self.dense, dense_softmax, classes_mask
             )
-
-

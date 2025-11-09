@@ -693,9 +693,24 @@ class SEDTask4(pl.LightningModule):
                     audio_id: gt for audio_id, gt in ground_truth.items()
                     if len(gt) > 0
                 }
+                available_ids = [
+                    audio_id for audio_id in ground_truth.keys()
+                    if audio_id in audio_durations
+                ]
+                missing_ids = [
+                    audio_id for audio_id in ground_truth.keys()
+                    if audio_id not in audio_durations
+                ]
+                if missing_ids:
+                    print("\n", f"Missing durations for {len(missing_ids)} files, they will be skipped.")
+                    # TODO: Investigate why durations are missing for these files
+                ground_truth = {
+                    audio_id: ground_truth[audio_id]
+                    for audio_id in available_ids
+                }
                 audio_durations = {
                     audio_id: audio_durations[audio_id]
-                    for audio_id in ground_truth.keys()
+                    for audio_id in available_ids
                 }
             psds1_student_psds_eval = compute_psds_from_operating_points(
                 self.test_psds_buffer_student,

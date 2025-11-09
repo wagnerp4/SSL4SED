@@ -9,7 +9,6 @@ from psds_eval import PSDSEval, plot_psd_roc
 import sed_scores_eval
 
 # TODOs:
-
 # add sebb based eval
 
 def get_event_list_current_file(df, fname):
@@ -253,7 +252,6 @@ def compute_psds_from_scores(
     num_jobs=4,
     save_dir=None,
 ):
-    
     psds, psd_roc, single_class_rocs, *_ = sed_scores_eval.intersection_based.psds(
         scores=scores, ground_truth=ground_truth_file,
         audio_durations=durations_file,
@@ -263,6 +261,7 @@ def compute_psds_from_scores(
     )
 
     if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
         scores_dir = os.path.join(save_dir, "scores")
         sed_scores_eval.io.write_sed_scores(scores, scores_dir)
         filename = (
@@ -277,6 +276,14 @@ def compute_psds_from_scores(
             alpha_st=alpha_st, unit_of_time='hour',  max_efpr=max_efpr,
             psds=psds,
         )
+        progression_path = os.path.join(save_dir, "psds_progression.txt")
+        effective_tp_rate, effective_fp_rate = psd_roc
+        with open(progression_path, "w") as file_handle:
+            file_handle.write("PSDS progression\n")
+            file_handle.write(f"Score: {psds:.6f}\n")
+            file_handle.write("Effective TP Rate\tEffective FP Rate\n")
+            for tp_rate, fp_rate in zip(effective_tp_rate, effective_fp_rate):
+                file_handle.write(f"{tp_rate:.6f}\t{fp_rate:.6f}\n")
     return psds
 
 def psds_results(psds_obj):
