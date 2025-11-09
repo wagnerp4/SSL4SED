@@ -1,6 +1,8 @@
 import os
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import psds_eval
 import sed_eval
 from psds_eval import PSDSEval, plot_psd_roc
@@ -30,7 +32,7 @@ def get_event_list_current_file(df, fname):
 
     return event_list_for_current_file
 
-# frame-based metrics
+# collar-based metrics
 
 def event_based_evaluation_df(
     reference, estimated, t_collar=0.200, percentage_of_length=0.2

@@ -57,9 +57,20 @@ python train_stage2.py --gpus YOUR_DEVICE_ID,
 
 ### Support testing training on laptop
 ```bash
-python src/training/train_stage1.py --fast_dev_run # stage 1
-python src/training/train_stage2.py --fast_dev_run # stage 2
+python src/training/train_stage1.py --fast_dev_run --subset_fraction 0.1 # stage 1
+python src/training/train_stage2.py --fast_dev_run --subset_fraction 0.01 # stage 2
 ```
+
+## Data inspection
+```bash
+# To inspect the default stage-2 datasets from repo root:
+python src/dataio/verify_dataset.py
+# To stop the run when anything is missing:
+python src/dataio/verify_dataset.py --fail-on-missing
+# To check custom pairs:
+python src/dataio/verify_dataset.py --tsv data/DESED/annotations/weak.tsv:data/DESED/audio/weak_16k
+```
+export MallocStackLoggingNoCompact=1
 
 ## Update Notice:
 - Implement interface for more datasets and data acquisition methods (e.g. zenodo) to allow more flexible useage

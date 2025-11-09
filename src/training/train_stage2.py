@@ -1,23 +1,62 @@
 import argparse
 import os
+import sys
+import warnings
+from pathlib import Path
 import pandas as pd
 import torch
 import yaml
 
 from src.dataio.sampler import ConcatDatasetBatchSampler
 from src.dataio.datasets_atst_sed import StronglyAnnotatedSet, UnlabeledSet, WeakSet
+from src.dataio.verify_dataset import collect_missing_files
 from src.utils.encoder import ManyHotEncoder
 from src.models.CRNN_e2e import CRNN
-from .local.scheduler import ExponentialWarmup
-from .local.classes_dict import classes_labels
-from .local.stage2_trainer import SEDICT
+from src.training.local.scheduler import ExponentialWarmup
+from src.training.local.classes_dict import classes_labels
+from src.training.local.stage2_trainer import SEDICT
 from src.training.train_utils import separate_opt_params
+
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-import warnings
 warnings.filterwarnings("ignore")
+
+
+def _compare_missing_sources(label, dataset_missing, tsv_path, audio_folder, root_path):
+    if tsv_path is None or audio_folder is None:
+        return
+    dataset_paths = {os.path.abspath(path) for path in dataset_missing}
+    if not dataset_paths and not os.path.isfile(tsv_path):
+        return
+    tsv_abs = Path(tsv_path).resolve()
+    folder_abs = Path(audio_folder).resolve()
+    verify_map = collect_missing_files(tsv_abs, folder_abs)
+    verify_paths = {os.path.abspath(path) for path in verify_map.keys()}
+    if dataset_paths == verify_paths:
+        if dataset_paths:
+            print(f"[data-check:{label}] Missing files match verification ({len(dataset_paths)} entries).")
+        return
+    extra_dataset = dataset_paths - verify_paths
+    if extra_dataset:
+        print(f"[data-check:{label}] Detected {len(extra_dataset)} files missing during dataset build but not flagged by verification:")
+        for path in sorted(extra_dataset):
+            _print_compact_path(path, root_path)
+    extra_verify = verify_paths - dataset_paths
+    if extra_verify:
+        print(f"[data-check:{label}] Verification reported {len(extra_verify)} files not observed during dataset build (possibly unused rows or naming mismatches):")
+        for path in sorted(extra_verify):
+            _print_compact_path(path, root_path)
+
+
+def _print_compact_path(path, root_path):
+    try:
+        rel = Path(path).resolve().relative_to(root_path)
+        display = str(rel)
+    except Exception:
+        display = path
+    print(f"    {display}")
 
 def single_run(
     config,
@@ -28,7 +67,8 @@ def single_run(
     fast_dev_run=False,
     evaluation=False,
     callbacks=None,
-    subset_fraction=1.0
+    subset_fraction=1.0,
+    verify_data=False
 ):
     config.update({"log_dir": log_dir})
 
@@ -37,12 +77,10 @@ def single_run(
         torch.set_default_dtype(torch.float32)
         print("Mac detected (MPS backend). Using float32 for fast_dev_run compatibility.")
 
-    # handle seed
     seed = config["training"]["seed"]
     if seed:
         pl.seed_everything(seed, workers=True)
 
-    ##### data prep test ##########
     encoder = ManyHotEncoder(
         list(classes_labels.keys()),
         audio_len=config["data"]["audio_max_len"],
@@ -52,6 +90,9 @@ def single_run(
         fs=config["data"]["fs"],
     )
 
+    project_root = Path(config.get("project_root", ".")).resolve()
+
+    print("Preparing test dataset")
     if not evaluation:
         devtest_df = pd.read_csv(config["data"]["test_tsv"], sep="\t")
         devtest_dataset = StronglyAnnotatedSet(
@@ -62,6 +103,14 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
+        if verify_data:
+            _compare_missing_sources(
+                "test_tsv",
+                devtest_dataset.missing_files,
+                config["data"]["test_tsv"],
+                config["data"]["test_folder"],
+                project_root,
+            )
     else:
         devtest_dataset = UnlabeledSet(
             config["data"]["eval_folder"],
@@ -73,7 +122,7 @@ def single_run(
 
     test_dataset = devtest_dataset
 
-    ##### model definition  ############
+    print("Creating student and teacher models")
     sed_student = CRNN(
         unfreeze_atst_layer=config["opt"]["tfm_trainable_layers"], 
         **config["net"], 
@@ -89,8 +138,10 @@ def single_run(
         atst_init=config["ultra"]["atst_init"],
         mode="teacher")
     
+    print("Preparing training and validation datasets")
     if test_state_dict is None:
-        ##### data prep train valid ##########
+
+        print("Preparing synthetic training and validation datasets")
         synth_df = pd.read_csv(config["data"]["synth_tsv"], sep="\t")
         if subset_fraction < 1.0:
             synth_df = synth_df.sample(frac=subset_fraction, random_state=config["training"]["seed"]).reset_index(drop=True)
@@ -102,7 +153,16 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
+        if verify_data:
+            _compare_missing_sources(
+                "synth_tsv",
+                synth_set.missing_files,
+                config["data"]["synth_tsv"],
+                config["data"]["synth_folder"],
+                project_root,
+            )
 
+        print("Preparing real training and validation datasets")
         strong_df = pd.read_csv(config["data"]["strong_tsv"], sep="\t")
         if subset_fraction < 1.0:
             strong_df = strong_df.sample(frac=subset_fraction, random_state=config["training"]["seed"]).reset_index(drop=True)
@@ -114,16 +174,16 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
-        # If you want to use external dataset, first extracted them and then change the dataset for the strongly-labelled part of the data
-        # external_df = pd.read_csv(config["data"]["external_tsv"], sep="\t")
-        # external_set = StronglyAnnotatedSet(
-        #     config["data"]["external_folder"],
-        #     external_df,
-        #     encoder,
-        #     return_filename=True,
-        #     pad_to=config["data"]["audio_max_len"],
-        #     feat_params=config["feats"]
-        # )
+        if verify_data:
+            _compare_missing_sources(
+                "strong_tsv",
+                strong_set.missing_files,
+                config["data"]["strong_tsv"],
+                config["data"]["strong_folder"],
+                project_root,
+            )
+
+        print("Preparing weak training and validation datasets")
         weak_df = pd.read_csv(config["data"]["weak_tsv"], sep="\t")
         if subset_fraction < 1.0:
             weak_df = weak_df.sample(frac=subset_fraction, random_state=config["training"]["seed"]).reset_index(drop=True)
@@ -141,6 +201,16 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
+        if verify_data:
+            _compare_missing_sources(
+                "weak_tsv",
+                weak_set.missing_files,
+                config["data"]["weak_tsv"],
+                config["data"]["weak_folder"],
+                project_root,
+            )
+
+        print("Preparing synthetic validation dataset")
         synth_df_val = pd.read_csv(config["data"]["synth_val_tsv"], sep="\t")
         if subset_fraction < 1.0:
             synth_df_val = synth_df_val.sample(frac=subset_fraction, random_state=config["training"]["seed"]).reset_index(drop=True)
@@ -152,6 +222,16 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
+        if verify_data:
+            _compare_missing_sources(
+                "synth_val_tsv",
+                synth_val.missing_files,
+                config["data"]["synth_val_tsv"],
+                config["data"]["synth_val_folder"],
+                project_root,
+            )
+
+        print("Preparing unlabeled training dataset")
         unlabeled_set = UnlabeledSet(
             config["data"]["unlabeled_folder"],
             encoder,
@@ -159,6 +239,8 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
+
+        print("Preparing real validation dataset")
         strong_df_val = pd.read_csv(config["data"]["strong_val_tsv"], sep="\t")
         if subset_fraction < 1.0:
             strong_df_val = strong_df_val.sample(frac=subset_fraction, random_state=config["training"]["seed"]).reset_index(drop=True)
@@ -170,6 +252,16 @@ def single_run(
             pad_to=config["data"]["audio_max_len"],
             feat_params=config["feats"]
         )
+        if verify_data:
+            _compare_missing_sources(
+                "strong_val_tsv",
+                strong_val.missing_files,
+                config["data"]["strong_val_tsv"],
+                config["data"]["strong_folder"],
+                project_root,
+            )
+
+        print("Preparing weak validation dataset")
         weak_val = WeakSet(
             config["data"]["weak_folder"],
             valid_weak_df,
@@ -178,12 +270,24 @@ def single_run(
             return_filename=True,
             feat_params=config["feats"]
         )
+        if verify_data:
+            _compare_missing_sources(
+                "weak_val_tsv",
+                weak_val.missing_files,
+                config["data"]["weak_tsv"],
+                config["data"]["weak_folder"],
+                project_root,
+            )
+
+        print("Combining training datasets")
         tot_train_data = [strong_set, synth_set, weak_set, unlabeled_set]
         batch_sizes = config["training"]["batch_size"]
         train_dataset = torch.utils.data.ConcatDataset(tot_train_data)
         samplers = [torch.utils.data.RandomSampler(x) for x in tot_train_data]
         batch_sampler = ConcatDatasetBatchSampler(samplers, batch_sizes)
         valid_dataset = torch.utils.data.ConcatDataset([weak_val, synth_val, strong_val])
+
+        ###
 
         # training params and optimizers
         epoch_len = min([len(tot_train_data[indx]) // 
@@ -275,7 +379,7 @@ def single_run(
         limit_train_batches = 2
         limit_val_batches = 2
         limit_test_batches = 2
-        n_epochs = 3
+        n_epochs = 1
     else:
         flush_logs_every_n_steps = 100
         log_every_n_steps = 40
@@ -307,9 +411,8 @@ def single_run(
         enable_progress_bar=config["training"]["enable_progress_bar"],
         use_distributed_sampler=False
     )
+    
     if test_state_dict is None:
-
-        # start tracking energy consumption
         trainer.fit(desed_training, ckpt_path=checkpoint_resume)
         best_path = trainer.checkpoint_callback.best_model_path
         print(f"best model: {best_path}")
@@ -411,6 +514,12 @@ def parse_args(argv=None):
         type=float,
         help="Fraction of training and validation data to use (0.0-1.0). Useful for quick testing."
     )
+    parser.add_argument(
+        "--verify_data",
+        action="store_true",
+        default=False,
+        help="Compare missing audio files observed during dataset construction with verification results.",
+    )
     args = parser.parse_args(argv)
     return args
 
@@ -467,5 +576,6 @@ if __name__ == "__main__":
         test_model_state_dict,
         args.fast_dev_run,
         evaluation,
-        subset_fraction=args.subset_fraction
+        subset_fraction=args.subset_fraction,
+        verify_data=args.verify_data
     )

@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import numpy as np
 import torchaudio
+import warnings
 import random
 import torch
 import glob
@@ -93,6 +94,22 @@ def process_labels(df, onset, offset):
     return df_new.drop_duplicates()
 
 
+def _load_with_soundfile_backend(file):
+    try:
+        import soundfile as sf
+    except Exception as e:
+        return None, None, e
+    try:
+        audio, sample_rate = sf.read(file, always_2d=False, dtype="float32")
+    except Exception as e:
+        return None, None, e
+    if audio.ndim == 1:
+        waveform = torch.from_numpy(audio.copy())
+    else:
+        waveform = torch.from_numpy(audio.T.copy())
+    return waveform, sample_rate, None
+
+
 def read_audio(file, multisrc, random_channel, pad_to):
     """Read an audio file safely and preprocess to model-ready tensor.
 
@@ -109,17 +126,17 @@ def read_audio(file, multisrc, random_channel, pad_to):
     """
 
     try:
-        # Try with soundfile backend first (best compatibility)
         mixture, fs = torchaudio.load(file, backend="soundfile")
     except Exception as e1:
         try:
-            # Fall back to sox_io
             mixture, fs = torchaudio.load(file, backend="sox_io")
-        except Exception as e2:
-            print(f"Warning: Failed to read audio '{file}' due to '{e2}'. Returning silence.")
-            fs = 16000
-            target_len = pad_to if pad_to is not None else fs * 10
-            mixture = torch.zeros(target_len)
+        except Exception:
+            mixture, fs, sf_error = _load_with_soundfile_backend(file)
+            if mixture is None or fs is None:
+                warnings.warn(f"Failed to read audio '{file}' due to '{sf_error}'. Returning silence.")
+                fs = 16000
+                target_len = pad_to if pad_to is not None else fs * 10
+                mixture = torch.zeros(target_len)
 
     if not multisrc:
         mixture = to_mono(mixture, random_channel)
@@ -189,6 +206,7 @@ class StronglyAnnotatedSet(Dataset):
         tsv_entries = tsv_entries.dropna()
         
         examples = {}
+        self.missing_files = []
         if forbidden_list is not None:
             forbidden_list = open(forbidden_list, "r").readlines()
             forbidden_list = [f.strip() for f in forbidden_list]
@@ -205,8 +223,9 @@ class StronglyAnnotatedSet(Dataset):
                 filename = r["filename"]
                 if "strong_real_16k" in audio_folder and not filename.endswith("_16k.wav") and filename.endswith(".wav"):
                     filename = filename[:-4] + "_16k.wav"
-                full_path = os.path.join(audio_folder, filename)
+                full_path = os.path.abspath(os.path.join(audio_folder, filename))
                 if not os.path.isfile(full_path):
+                    self.missing_files.append(full_path)
                     skipped_missing_files += 1
                     continue
                 examples[r["filename"]] = {
@@ -294,6 +313,7 @@ class WeakSet(Dataset):
         self.sed_transform = SEDTransform(feat_params)
         self.atst_transform = ATSTTransform()
         examples = {}
+        self.missing_files = []
         skipped_missing_files = 0
         for i, r in tsv_entries.iterrows():
 
@@ -303,8 +323,9 @@ class WeakSet(Dataset):
                 filename = r["filename"]
                 if "strong_real_16k" in audio_folder and not filename.endswith("_16k.wav") and filename.endswith(".wav"):
                     filename = filename[:-4] + "_16k.wav"
-                full_path = os.path.join(audio_folder, filename)
+                full_path = os.path.abspath(os.path.join(audio_folder, filename))
                 if not os.path.isfile(full_path):
+                    self.missing_files.append(full_path)
                     skipped_missing_files += 1
                     continue
                 examples[r["filename"]] = {
@@ -316,7 +337,7 @@ class WeakSet(Dataset):
 
         self.examples = examples
         self.examples_list = list(examples.keys())
-        print(len(self.examples))
+        print("Number of examples: ", len(self.examples_list))
 
     def __len__(self):
         return len(self.examples_list)
@@ -363,13 +384,16 @@ class UnlabeledSet(Dataset):
         self.encoder = encoder
         self.fs = fs
         self.pad_to = pad_to * fs if pad_to is not None else None 
-        self.examples = glob.glob(os.path.join(unlabeled_folder, "*.wav"))
-        print(len(self.examples))
         self.return_filename = return_filename
         self.random_channel = random_channel
         self.multisrc = multisrc
         self.sed_transform = SEDTransform(feat_params)
         self.atst_transform = ATSTTransform()
+
+        self.examples = [os.path.abspath(path) for path in glob.glob(os.path.join(unlabeled_folder, "*.wav"))]
+        self.examples_list = list(self.examples)
+        self.missing_files = []
+        print("Number of examples: ", len(self.examples_list))
 
     def __len__(self):
         return len(self.examples)

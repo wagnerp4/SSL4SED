@@ -6,6 +6,7 @@ exp
 stage1_real.yaml
 stage2_real.yaml
 ckpts
+.DS_Store
 
 # Python
 *.py[cod]

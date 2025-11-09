@@ -237,6 +237,20 @@ class SEDTask4(pl.LightningModule):
     def detect(self, mel_feats, pretrained_feats, model):
         return model(self.scaler(self.take_log(mel_feats)), pretrained_feats)
 
+    def transfer_batch_to_device(self, batch, device, dataloader_idx):
+        if device.type == "mps":
+            from lightning_utilities.core.apply_func import apply_to_collection
+
+            def to_float32(x):
+                if isinstance(x, torch.Tensor) and x.dtype == torch.float64:
+                    return x.to(dtype=torch.float32)
+                return x
+
+            batch = apply_to_collection(batch, torch.Tensor, to_float32)
+
+        batch = super().transfer_batch_to_device(batch, device, dataloader_idx)
+        return batch
+
 
     def on_before_zero_grad(self, *args, **kwargs):
         # update EMA teacher

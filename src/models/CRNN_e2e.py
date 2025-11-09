@@ -1,4 +1,6 @@
 # ATST-Frame CRNN Model
+# Approximate parameter breakdown (student model):
+# CNN stack ≈ 0.61M, BiGRU ≈ 0.49M, fusion + heads ≈ 0.13M, ATST backbone ≈ 85.4M.
 
 import torch.nn as nn
 import torch
@@ -95,7 +97,6 @@ class CRNN(nn.Module):
         # rnn features
         embeddings = self.atst_frame(pretrain_x)
         if embeddings.shape[-1] != x.shape[1]:
-            # MPS doesn't support adaptive pooling when sizes aren't divisible
             if embeddings.device.type == "mps":
                 embeddings_cpu = embeddings.cpu()
                 embeddings_pooled = torch.nn.functional.adaptive_avg_pool1d(embeddings_cpu, x.shape[1]).transpose(1, 2)
