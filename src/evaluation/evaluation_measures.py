@@ -276,7 +276,7 @@ def compute_psds_from_scores(
             alpha_st=alpha_st, unit_of_time='hour',  max_efpr=max_efpr,
             psds=psds,
         )
-        progression_path = os.path.join(save_dir, "psds_progression.txt")
+        progression_path = os.path.join(save_dir, "..", "psds_progression.txt")
         effective_tp_rate, effective_fp_rate = psd_roc
         with open(progression_path, "w") as file_handle:
             file_handle.write("PSDS progression\n")

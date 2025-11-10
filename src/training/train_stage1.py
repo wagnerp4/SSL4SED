@@ -73,7 +73,7 @@ def single_run(
         )
     test_dataset = devtest_dataset
 
-    # model definition
+    # student definition
     # TODO: wrap the CRNN model
     sed_student = CRNN(
         unfreeze_atst_layer=config["opt"]["tfm_trainable_layers"], 

@@ -18,6 +18,8 @@ dist/
 build/
 .eggs/
 
+*.ipynb
+
 # uv
 .venv/
 uv.lock
